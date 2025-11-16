@@ -233,9 +233,13 @@ Choose based on your needs:
 
 The application uses **yt-dlp** to download Instagram reels, automatically extracting cookies from your browser:
 
-1. **Just stay logged into Instagram** in Chrome, Firefox, Edge, or Safari
+1. **Just stay logged into Instagram** in Firefox (recommended), Edge, Safari, or Chrome
 2. The app automatically uses your browser cookies (like Chrome extensions do!)
 3. **No manual authentication needed** - works out of the box for public content
+
+**Recommended:** Use **Firefox** for the best experience (it handles concurrent access better than Chrome)
+
+**Chrome users:** If you see a "cookie database locked" error, either close Chrome or use Firefox instead.
 
 **For detailed information**, see [YT_DLP_USAGE_GUIDE.md](YT_DLP_USAGE_GUIDE.md)
 

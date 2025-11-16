@@ -146,23 +146,49 @@ class InstagramDownloader:
 
         # Try to use browser cookies (like Chrome extensions do!) to avoid 403 errors
         # This requires being logged into Instagram in your browser
+        # Firefox first: handles concurrent access better (doesn't lock database)
         cookies_loaded = False
-        for browser in ['chrome', 'firefox', 'edge', 'safari']:
+        cookie_error_msg = None
+
+        for browser in ['firefox', 'edge', 'safari', 'chrome']:
             try:
-                # Test if cookies can be loaded
-                with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True, 'cookiesfrombrowser': (browser,)}) as test_ydl:
+                # Test if cookies can be loaded from this browser
+                test_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'cookiesfrombrowser': (browser,),
+                    'extract_flat': True  # Don't actually download during test
+                }
+                with yt_dlp.YoutubeDL(test_opts) as test_ydl:
                     pass  # Just test if it works
+
+                # If we got here, cookies loaded successfully
                 ydl_opts['cookiesfrombrowser'] = (browser,)
                 cookies_loaded = True
                 if progress_callback:
-                    progress_callback(f"Using {browser.title()} cookies")
+                    progress_callback(f"✓ Using {browser.title()} cookies for authentication")
                 break
-            except:
-                # Browser not found or cookies inaccessible, try next
+
+            except Exception as e:
+                error_str = str(e)
+                # Check for specific Chrome cookie database lock error
+                if 'could not copy' in error_str.lower() and 'cookie' in error_str.lower():
+                    cookie_error_msg = f"{browser.title()}: Cookie database is locked (close {browser.title()} and try again)"
+                elif 'could not find' in error_str.lower():
+                    cookie_error_msg = f"{browser.title()}: Not found or not logged into Instagram"
+                else:
+                    cookie_error_msg = f"{browser.title()}: Cookies not accessible"
+                # Try next browser
                 continue
 
-        if not cookies_loaded and progress_callback:
-            progress_callback("No browser cookies found - may encounter 403 errors")
+        if not cookies_loaded:
+            if progress_callback:
+                if cookie_error_msg and 'locked' in cookie_error_msg:
+                    progress_callback("⚠️  Chrome cookie database is locked - close Chrome or use Firefox")
+                    progress_callback("ℹ️  Attempting download without cookies (works for public reels)")
+                else:
+                    progress_callback("ℹ️  No browser cookies found - attempting download without cookies")
+                    progress_callback("💡 Tip: Login to Instagram in Firefox/Edge/Safari for better reliability")
 
         # Retry logic
         for attempt in range(max_retries):

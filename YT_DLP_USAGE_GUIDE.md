@@ -18,21 +18,30 @@ The downloader automatically extracts cookies from your browser (Chrome, Firefox
 ### Supported Browsers
 
 The application tries browsers in this order:
-1. Chrome
-2. Firefox
-3. Edge
-4. Safari
+1. **Firefox** (Recommended - handles concurrent access best!)
+2. Edge
+3. Safari
+4. Chrome (may need to close Chrome while downloading)
 
 It will automatically use the first browser where it finds Instagram cookies.
+
+**Why Firefox is recommended:**
+- Doesn't lock cookie database while running
+- You can keep Firefox open while the app downloads
+- More reliable than Chrome for this use case
 
 ## Setup Instructions
 
 ### Step 1: Login to Instagram in Your Browser
 
-1. Open your preferred browser (Chrome, Firefox, Edge, or Safari)
+1. Open **Firefox** (recommended), Edge, Safari, or Chrome
 2. Go to https://instagram.com
 3. Login to your Instagram account
 4. **Keep the browser session active** (don't logout)
+
+**Tip:** If you use Chrome and get a "cookie database locked" error, either:
+- Close Chrome before running the app, OR
+- Switch to Firefox (it works even while Firefox is running!)
 
 ### Step 2: Run the Application
 
@@ -56,21 +65,33 @@ The application will:
 
 When you start downloading, you should see messages like:
 ```
-Using Chrome cookies
+✓ Using Firefox cookies for authentication
 Downloading reel: DNgJb4Hs5FZ
 Successfully downloaded: DNgJb4Hs5FZ
 ```
 
+If you see the Chrome database lock error:
+```
+⚠️  Chrome cookie database is locked - close Chrome or use Firefox
+ℹ️  Attempting download without cookies (works for public reels)
+```
+
+**What this means:**
+- Chrome is running and has locked its cookie database
+- The app will try to download without cookies
+- For public reels, this might still work!
+- For better reliability, close Chrome or use Firefox
+
 If you see:
 ```
-No browser cookies found - may encounter 403 errors
+ℹ️  No browser cookies found - attempting download without cookies
+💡 Tip: Login to Instagram in Firefox/Edge/Safari for better reliability
 ```
 
 This means:
-- You're not logged into Instagram in any supported browser, OR
-- The browser's cookie database is locked/inaccessible
-
-**Solution:** Make sure you're logged into Instagram in Chrome, Firefox, Edge, or Safari.
+- You're not logged into Instagram in any supported browser
+- The app will still try to download (works for public reels)
+- For best results, login to Instagram in Firefox, Edge, or Safari
 
 ## Advantages Over Previous Method
 
@@ -84,6 +105,39 @@ This means:
 | Setup complexity | Low (just login in browser) | High (scripts, sessions) |
 
 ## Troubleshooting
+
+### Problem: "Could not copy Chrome cookie database" (Most Common!)
+
+**Error message:**
+```
+ERROR: Could not copy Chrome cookie database
+```
+
+**Cause:** Chrome locks its cookie database while it's running, preventing yt-dlp from accessing it.
+
+**Solutions (choose one):**
+
+**Option 1: Close Chrome (Quickest)**
+1. Close all Chrome windows
+2. Run the application
+3. Chrome cookies will now be accessible
+
+**Option 2: Use Firefox Instead (Recommended)**
+1. Open Firefox
+2. Login to Instagram at instagram.com
+3. Run the application
+4. Firefox handles concurrent cookie access better than Chrome
+
+**Option 3: Use Edge or Safari**
+- Same as Firefox - just login to Instagram in Edge or Safari instead
+
+**Why this happens:**
+- Chrome keeps its cookie database locked while running for security
+- The app tries browsers in order: Firefox → Edge → Safari → Chrome
+- Firefox/Edge/Safari handle concurrent access better
+- If all fail, the app still tries to download without cookies (works for public reels)
+
+**Best practice:** Keep Instagram logged in on Firefox for the most reliable experience!
 
 ### Problem: "No browser cookies found"
 
