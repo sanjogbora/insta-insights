@@ -30,12 +30,13 @@ class InstagramDownloader:
         # Create output folder if it doesn't exist
         os.makedirs(self.output_folder, exist_ok=True)
 
-    def setup_instaloader(self, session_file: Optional[str] = None):
+    def setup_instaloader(self, session_file: Optional[str] = None, auto_load_session: bool = True):
         """
         Initialize instaloader instance with improved anti-bot measures.
 
         Args:
             session_file: Optional path to session file for authenticated downloads
+            auto_load_session: If True, automatically look for session files in config folder
         """
         self.loader = instaloader.Instaloader(
             download_videos=True,
@@ -55,25 +56,50 @@ class InstagramDownloader:
         self.loader.context.iphone_support = False
         # Note: is_logged_in is read-only, set automatically by instaloader
 
-        self.session_file = session_file
+        # Try to load session file
+        loaded_session = False
 
-        # Load session if available
+        # 1. Try explicitly provided session file
         if session_file and os.path.exists(session_file):
             try:
-                # Session files are typically saved with username
-                # This is a simplified version - actual implementation may vary
                 self.loader.load_session_from_file(session_file)
-                # Don't set is_logged_in here - it's read-only property
+                self.session_file = session_file
+                loaded_session = True
+                print(f"Loaded session from: {session_file}")
             except Exception as e:
                 print(f"Warning: Could not load session file: {e}")
 
-    def login(self, username: str, password: str) -> bool:
+        # 2. Auto-detect session files in config folder
+        elif auto_load_session:
+            config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config")
+            if os.path.exists(config_dir):
+                # Look for any session files
+                for file in os.listdir(config_dir):
+                    if file.startswith("instagram_session_"):
+                        session_path = os.path.join(config_dir, file)
+                        try:
+                            self.loader.load_session_from_file(session_path)
+                            self.session_file = session_path
+                            loaded_session = True
+                            print(f"Auto-loaded session from: {session_path}")
+                            break
+                        except Exception as e:
+                            print(f"Warning: Could not load auto-detected session: {e}")
+                            continue
+
+        if loaded_session:
+            print("✓ Using saved Instagram session (no login required)")
+        else:
+            print("ℹ No session found - you may need to login or create a session")
+
+    def login(self, username: str, password: str, two_factor_callback: Optional[Callable[[], str]] = None) -> bool:
         """
-        Login to Instagram.
+        Login to Instagram with optional 2FA support.
 
         Args:
             username: Instagram username
             password: Instagram password
+            two_factor_callback: Optional callback function that returns 2FA code when called
 
         Returns:
             True if login successful, False otherwise
@@ -82,11 +108,38 @@ class InstagramDownloader:
             self.setup_instaloader()
 
         try:
+            # Set 2FA callback if provided
+            if two_factor_callback:
+                self.loader.context.two_factor_auth_pending = False
+
             self.loader.login(username, password)
             self.username = username  # Track username for session saving
             # Note: is_logged_in is read-only, set automatically by instaloader upon successful login
             return True
+        except instaloader.exceptions.TwoFactorAuthRequiredException:
+            # Handle 2FA
+            if two_factor_callback:
+                try:
+                    two_factor_code = two_factor_callback()
+                    if two_factor_code:
+                        # Instaloader will prompt for 2FA - we need to handle this differently
+                        # The library expects stdin input, so we need to work around this
+                        print(f"2FA required - please handle manually or use session file")
+                        return False
+                    else:
+                        print("2FA code not provided")
+                        return False
+                except Exception as e:
+                    print(f"2FA handling failed: {e}")
+                    return False
+            else:
+                print("2FA required but no callback provided. Please enable 2FA support in GUI.")
+                return False
         except Exception as e:
+            error_msg = str(e)
+            if "two_factor_required" in error_msg.lower() or "two factor" in error_msg.lower():
+                print(f"Login failed: Two-factor authentication required. Error: {e}")
+                return False
             print(f"Login failed: {e}")
             return False
 
