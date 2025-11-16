@@ -7,6 +7,16 @@ Helps diagnose GPU issues and provides installation instructions for CUDA suppor
 import subprocess
 import sys
 import platform
+import os
+
+# Add current directory to path to import modules
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from modules.device_manager import DeviceManager
+    HAS_DEVICE_MANAGER = True
+except ImportError:
+    HAS_DEVICE_MANAGER = False
 
 
 def run_command(cmd):
@@ -165,6 +175,34 @@ def main():
     print()
     print("🔍 Instagram Reel Transcriber - GPU Diagnostic Tool")
     print()
+
+    # Quick check using DeviceManager if available
+    if HAS_DEVICE_MANAGER:
+        print("=" * 70)
+        print("PYTORCH DEVICE DETECTION (Using DeviceManager)")
+        print("=" * 70)
+        print()
+        try:
+            manager = DeviceManager()
+            manager.print_device_summary()
+            print()
+
+            # If GPU is detected and working, we're done!
+            if manager.is_gpu_available():
+                print("✅ GPU DETECTED AND WORKING!")
+                print()
+                print("Your PyTorch installation is correctly configured.")
+                print(f"The app will use: {manager.get_friendly_name()}")
+                print()
+                return
+
+            # If no GPU, continue with detailed diagnostics
+            print("ℹ️  No GPU acceleration detected - running detailed diagnostics...")
+            print()
+        except Exception as e:
+            print(f"⚠️  DeviceManager error: {e}")
+            print("Falling back to manual detection...")
+            print()
 
     # Step 1: Detect GPU
     gpu_type = detect_gpu()

@@ -5,6 +5,10 @@ Checks if all required dependencies are installed correctly.
 """
 
 import sys
+import os
+
+# Add current directory to path to import modules
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def check_python_version():
@@ -57,16 +61,32 @@ def check_ffmpeg():
 
 
 def check_gpu():
-    """Check if GPU (CUDA) is available."""
-    print("Checking GPU (CUDA)...", end=" ")
+    """Check if GPU is available (CUDA/MPS/ROCm)."""
+    print("Checking GPU...", end=" ")
     try:
-        import torch
-        if torch.cuda.is_available():
-            print(f"✓ {torch.cuda.get_device_name(0)}")
-            return True
-        else:
-            print("✗ (CPU only - this is okay, just slower)")
-            return False
+        # Try to use DeviceManager for better detection
+        try:
+            from modules.device_manager import DeviceManager
+            manager = DeviceManager()
+            manager.detect_best_device()
+
+            if manager.is_gpu_available():
+                device_name = manager.get_friendly_name()
+                device_type = manager.device_type.upper()
+                print(f"✓ {device_name} ({device_type})")
+                return True
+            else:
+                print("✗ (CPU only - this is okay, just slower)")
+                return False
+        except ImportError:
+            # Fallback to basic CUDA check if DeviceManager not available
+            import torch
+            if torch.cuda.is_available():
+                print(f"✓ {torch.cuda.get_device_name(0)} (CUDA)")
+                return True
+            else:
+                print("✗ (CPU only - this is okay, just slower)")
+                return False
     except:
         print("✗ (CPU only)")
         return False

@@ -7,6 +7,7 @@ import whisper
 import os
 from typing import Optional, Callable, List, Dict, Tuple
 import torch
+from .device_manager import DeviceManager
 
 
 class WhisperTranscriber:
@@ -33,7 +34,13 @@ class WhisperTranscriber:
 
         self.model_size = model_size
         self.model = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # Use DeviceManager for smart device detection
+        # This auto-detects: CUDA (NVIDIA) → MPS (Apple) → ROCm (AMD) → CPU
+        self.device_manager = DeviceManager()
+        self.device = self.device_manager.detect_best_device()
+        self.device_type = self.device_manager.device_type
+        self.device_name = self.device_manager.device_name
 
     def load_model(self, progress_callback: Optional[Callable[[str], None]] = None):
         """
@@ -86,8 +93,11 @@ class WhisperTranscriber:
         try:
             # Transcribe the video
             # Whisper can handle video files directly (extracts audio automatically)
+            # Use FP16 for CUDA and MPS (GPU acceleration), but not for CPU
+            use_fp16 = self.device_type in ["cuda", "mps", "rocm"]
+
             transcribe_options = {
-                "fp16": self.device == "cuda",  # Use FP16 only on CUDA
+                "fp16": use_fp16,
                 "verbose": False
             }
 
@@ -200,8 +210,11 @@ class WhisperTranscriber:
             return False, None, f"Video file not found: {video_path}"
 
         try:
+            # Use FP16 for GPU devices (CUDA/MPS/ROCm), not for CPU
+            use_fp16 = self.device_type in ["cuda", "mps", "rocm"]
+
             transcribe_options = {
-                "fp16": self.device == "cuda",
+                "fp16": use_fp16,
                 "verbose": False
             }
 
@@ -264,12 +277,21 @@ class WhisperTranscriber:
         Returns:
             Dictionary with model information
         """
-        return {
+        info = {
             'model_size': self.model_size,
             'device': self.device,
+            'device_type': self.device_type,
+            'device_name': self.device_name,
             'is_loaded': self.model is not None,
-            'available_models': self.AVAILABLE_MODELS
+            'available_models': self.AVAILABLE_MODELS,
+            'speed_estimate': self.device_manager.get_speed_estimate()
         }
+
+        # Add detailed device info if available
+        if hasattr(self, 'device_manager'):
+            info['device_details'] = self.device_manager.get_device_info()
+
+        return info
 
     def unload_model(self):
         """Unload the model to free memory."""

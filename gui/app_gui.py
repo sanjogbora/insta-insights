@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.excel_handler import ExcelHandler
 from modules.downloader import InstagramDownloader
 from modules.transcriber import WhisperTranscriber
+from modules.device_manager import DeviceManager
 from config import settings
 
 
@@ -54,6 +55,10 @@ class InstagramTranscriberApp(ctk.CTk):
         self.downloaded_count = 0
         self.transcribed_count = 0
         self.failed_count = 0
+
+        # Detect compute device (GPU/CPU)
+        self.device_manager = DeviceManager()
+        self.device_manager.detect_best_device()
 
         # Create UI
         self.create_widgets()
@@ -174,6 +179,43 @@ class InstagramTranscriberApp(ctk.CTk):
             text_color="gray"
         )
         self.model_desc_label.pack(side="left", padx=10)
+
+        # Device info display
+        device_frame = ctk.CTkFrame(settings_frame)
+        device_frame.pack(fill="x", padx=10, pady=5)
+
+        device_label = ctk.CTkLabel(device_frame, text="Compute Device:", font=ctk.CTkFont(weight="bold"))
+        device_label.pack(side="left", padx=10)
+
+        # Get device info
+        device_name = self.device_manager.get_friendly_name()
+        device_type = self.device_manager.device_type.upper()
+        speed_estimate = self.device_manager.get_speed_estimate()
+
+        # Color code based on device type
+        if self.device_manager.device_type == "cuda":
+            device_color = "green"
+        elif self.device_manager.device_type == "mps":
+            device_color = "blue"
+        elif self.device_manager.device_type == "rocm":
+            device_color = "orange"
+        else:
+            device_color = "gray"
+
+        self.device_info_label = ctk.CTkLabel(
+            device_frame,
+            text=f"{device_name} ({device_type})",
+            text_color=device_color,
+            font=ctk.CTkFont(weight="bold")
+        )
+        self.device_info_label.pack(side="left", padx=10)
+
+        self.device_speed_label = ctk.CTkLabel(
+            device_frame,
+            text=f"Speed: {speed_estimate}",
+            text_color="gray"
+        )
+        self.device_speed_label.pack(side="left", padx=10)
 
         # Instagram login option
         login_frame = ctk.CTkFrame(settings_frame)
@@ -435,6 +477,12 @@ class InstagramTranscriberApp(ctk.CTk):
             self.update_current_task("Loading Whisper model...")
             model_size = self.model_var.get()
             self.transcriber = WhisperTranscriber(model_size)
+
+            # Log device info
+            device_info = self.transcriber.get_model_info()
+            self.log_status(f"Using device: {device_info['device_name']} ({device_info['device_type'].upper()})")
+            self.log_status(f"Speed estimate: {device_info['speed_estimate']}")
+
             self.transcriber.load_model(progress_callback=self.log_status)
 
             # Step 4: Process each URL

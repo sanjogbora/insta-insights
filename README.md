@@ -15,6 +15,88 @@ A powerful desktop application for bulk downloading Instagram reels and transcri
 - **Excel Integration**: Read URLs from Excel and write transcriptions back
 - **Session Management**: Optional Instagram login for private content
 - **Multiple Whisper Models**: Choose from tiny to large models based on your needs
+- **🚀 Universal GPU Support**: Automatically detects and uses available GPU acceleration
+
+## GPU Support
+
+The application **automatically detects and uses the best available compute device** without requiring manual configuration:
+
+### Supported Devices (Auto-Detected)
+
+| Device Type | Platform | Performance | Notes |
+|------------|----------|-------------|-------|
+| **NVIDIA GPU (CUDA)** | Windows, Linux | 🔥 Very Fast (5-10x) | Most common, best supported |
+| **Apple Silicon (MPS)** | macOS M1/M2/M3 | 🔥 Very Fast (5-10x) | Native Apple GPU acceleration |
+| **AMD GPU (ROCm)** | Linux only | 🔥 Fast | Requires ROCm PyTorch build |
+| **CPU** | All platforms | ✅ Works (slower) | Universal fallback |
+
+### How It Works
+
+1. **Automatic Detection**: When you start the app, it automatically detects what GPU/device you have
+2. **Smart Selection**: Uses the fastest available device (CUDA → MPS → ROCm → CPU)
+3. **No Configuration Needed**: Works with whatever PyTorch version you already have installed
+4. **Visual Feedback**: Shows which device is being used in the GUI
+
+### What You'll See
+
+The GUI displays your detected device:
+```
+Compute Device: NVIDIA GeForce RTX 3060 (CUDA)  Speed: Very Fast (Modern GPU)
+```
+
+Or for Apple Silicon:
+```
+Compute Device: Apple Silicon GPU (MPS)  Speed: Fast (Apple Silicon)
+```
+
+### Performance Comparison
+
+**Per video transcription (base model):**
+- GPU (CUDA/MPS): ~15-30 seconds ⚡
+- CPU: ~1-2 minutes 🐌
+
+**For 5000 videos:**
+- GPU: ~20-40 hours (1-2 days)
+- CPU: ~100-150 hours (4-6 days)
+
+### Troubleshooting GPU Issues
+
+If you have a GPU but it's not detected:
+
+```bash
+# Run the diagnostic tool
+python diagnose_gpu.py
+```
+
+This will:
+- Detect your GPU type
+- Check PyTorch installation
+- Provide specific fix instructions
+
+**Common issue**: PyTorch installed without CUDA/MPS support
+**Solution**: The diagnostic tool will show you exactly how to fix it
+
+### Installation Notes
+
+**The app works with your existing PyTorch installation** - you don't need to reinstall anything unless you want GPU support.
+
+If you want GPU acceleration:
+
+**NVIDIA GPU (Windows/Linux):**
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
+
+**Apple Silicon (macOS):**
+```bash
+pip install torch torchvision torchaudio
+# MPS support is included by default on macOS
+```
+
+**AMD GPU (Linux only):**
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm5.6
+```
 
 ## Screenshots
 
