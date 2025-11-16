@@ -24,8 +24,8 @@ class InstagramDownloader:
         """
         self.output_folder = output_folder
         self.loader = None
-        self.is_logged_in = False
         self.session_file = None
+        self.username = None  # Track logged in username
 
         # Create output folder if it doesn't exist
         os.makedirs(self.output_folder, exist_ok=True)
@@ -53,7 +53,7 @@ class InstagramDownloader:
 
         # Set additional context parameters to avoid detection
         self.loader.context.iphone_support = False
-        self.loader.context.is_logged_in = False
+        # Note: is_logged_in is read-only, set automatically by instaloader
 
         self.session_file = session_file
 
@@ -63,8 +63,7 @@ class InstagramDownloader:
                 # Session files are typically saved with username
                 # This is a simplified version - actual implementation may vary
                 self.loader.load_session_from_file(session_file)
-                self.is_logged_in = True
-                self.loader.context.is_logged_in = True
+                # Don't set is_logged_in here - it's read-only property
             except Exception as e:
                 print(f"Warning: Could not load session file: {e}")
 
@@ -84,11 +83,26 @@ class InstagramDownloader:
 
         try:
             self.loader.login(username, password)
-            self.is_logged_in = True
-            self.loader.context.is_logged_in = True
+            self.username = username  # Track username for session saving
+            # Note: is_logged_in is read-only, set automatically by instaloader upon successful login
             return True
         except Exception as e:
             print(f"Login failed: {e}")
+            return False
+
+    def is_logged_in(self) -> bool:
+        """
+        Check if currently logged in to Instagram.
+
+        Returns:
+            True if logged in, False otherwise
+        """
+        if self.loader is None:
+            return False
+        try:
+            # Check the loader's context for login status
+            return self.loader.context.is_logged_in
+        except:
             return False
 
     def save_session(self, username: str, session_path: str):
@@ -99,7 +113,7 @@ class InstagramDownloader:
             username: Instagram username
             session_path: Path to save session file
         """
-        if self.loader and self.is_logged_in:
+        if self.loader and self.is_logged_in():
             try:
                 self.loader.save_session_to_file(session_path)
             except Exception as e:
