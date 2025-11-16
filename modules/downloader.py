@@ -99,6 +99,44 @@ class InstagramDownloader:
 
         return None
 
+    def _extract_video_from_dict(self, data: dict) -> Optional[str]:
+        """
+        Recursively search a dictionary for video URLs.
+
+        Args:
+            data: Dictionary to search
+
+        Returns:
+            Video URL if found, None otherwise
+        """
+        if not isinstance(data, dict):
+            return None
+
+        # Check for video_url keys
+        if 'video_url' in data and isinstance(data['video_url'], str):
+            if 'cdninstagram.com' in data['video_url'] or 'fbcdn.net' in data['video_url']:
+                return data['video_url']
+
+        # Check for playback_url
+        if 'playback_url' in data and isinstance(data['playback_url'], str):
+            if 'cdninstagram.com' in data['playback_url'] or 'fbcdn.net' in data['playback_url']:
+                return data['playback_url']
+
+        # Recursively search nested dictionaries and lists
+        for value in data.values():
+            if isinstance(value, dict):
+                result = self._extract_video_from_dict(value)
+                if result:
+                    return result
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        result = self._extract_video_from_dict(item)
+                        if result:
+                            return result
+
+        return None
+
     def download_reel(
         self,
         url: str,
@@ -234,48 +272,80 @@ class InstagramDownloader:
                                 # Get page content
                                 page_content = page.content()
 
-                                # Look for video URL patterns in the HTML
-                                # Pattern 1: Look for "video_url":"..." in script tags
-                                video_url_matches = re.findall(r'"video_url":"([^"]+)"', page_content)
-                                for match in video_url_matches:
-                                    # Unescape URL
-                                    url_unescaped = match.replace('\\/', '/')
-                                    if 'cdninstagram.com' in url_unescaped or 'fbcdn.net' in url_unescaped:
-                                        video_url = url_unescaped
-                                        if progress_callback:
-                                            progress_callback(f"Extracted video URL from page source")
-                                        break
+                                # Pattern 1: Extract from window._sharedData or similar
+                                shared_data_match = re.search(r'window\._sharedData\s*=\s*({.+?});</script>', page_content, re.DOTALL)
+                                if shared_data_match:
+                                    try:
+                                        shared_data = json.loads(shared_data_match.group(1))
+                                        # Navigate through the data structure
+                                        if 'entry_data' in shared_data:
+                                            for page_type, page_data in shared_data['entry_data'].items():
+                                                if isinstance(page_data, list):
+                                                    for item in page_data:
+                                                        # Look for video_url in various places
+                                                        video_url = self._extract_video_from_dict(item)
+                                                        if video_url:
+                                                            if progress_callback:
+                                                                progress_callback(f"Found video in _sharedData")
+                                                            break
+                                    except:
+                                        pass
 
-                                # Pattern 2: Look for video in JSON-LD
+                                # Pattern 2: Look for video_url in any JSON structure
                                 if not video_url:
-                                    ld_json_matches = re.findall(r'<script type="application/ld\+json">(.+?)</script>', page_content, re.DOTALL)
-                                    for ld_json in ld_json_matches:
-                                        try:
-                                            data = json.loads(ld_json)
-                                            if isinstance(data, dict) and 'video' in data:
-                                                for video_data in data.get('video', []):
-                                                    if isinstance(video_data, dict) and 'contentUrl' in video_data:
-                                                        video_url = video_data['contentUrl']
-                                                        if progress_callback:
-                                                            progress_callback(f"Found video in JSON-LD")
-                                                        break
-                                        except:
-                                            continue
+                                    video_url_matches = re.findall(r'"video_url":"([^"]+)"', page_content)
+                                    for match in video_url_matches:
+                                        url_unescaped = match.replace('\\/', '/').replace('\\u0026', '&')
+                                        if 'cdninstagram.com' in url_unescaped or 'fbcdn.net' in url_unescaped:
+                                            video_url = url_unescaped
+                                            if progress_callback:
+                                                progress_callback(f"Found video_url in JSON")
+                                            break
 
-                                # Pattern 3: Look for direct .mp4 URLs
+                                # Pattern 3: Look for playback_url
                                 if not video_url:
-                                    mp4_matches = re.findall(r'(https://[^"\s]+\.mp4[^"\s]*)', page_content)
+                                    playback_matches = re.findall(r'"playback_url":"([^"]+)"', page_content)
+                                    for match in playback_matches:
+                                        url_unescaped = match.replace('\\/', '/').replace('\\u0026', '&')
+                                        if 'cdninstagram.com' in url_unescaped or 'fbcdn.net' in url_unescaped:
+                                            video_url = url_unescaped
+                                            if progress_callback:
+                                                progress_callback(f"Found playback_url")
+                                            break
+
+                                # Pattern 4: Direct .mp4 URLs
+                                if not video_url:
+                                    mp4_matches = re.findall(r'(https://[^"\s\\]+\.mp4[^"\s\\]*)', page_content)
                                     for match in mp4_matches:
-                                        clean_url = match.split('"')[0].split("'")[0]
-                                        if 'cdninstagram.com' in clean_url or 'fbcdn.net' in clean_url:
+                                        # Clean up the URL
+                                        clean_url = match.replace('\\/', '/').replace('\\u0026', '&')
+                                        clean_url = clean_url.split('"')[0].split("'")[0].split('\\')[0]
+                                        if ('cdninstagram.com' in clean_url or 'fbcdn.net' in clean_url) and len(clean_url) > 50:
                                             video_url = clean_url
                                             if progress_callback:
-                                                progress_callback(f"Found .mp4 URL in page")
+                                                progress_callback(f"Found .mp4 URL")
+                                            break
+
+                                # Pattern 5: Look in all <script> tags for JSON data
+                                if not video_url:
+                                    script_matches = re.findall(r'<script[^>]*>(.+?)</script>', page_content, re.DOTALL)
+                                    for script in script_matches:
+                                        # Try to find video URLs in the script
+                                        urls = re.findall(r'https://[^"\s\\]+(?:cdninstagram\.com|fbcdn\.net)[^"\s\\]+\.mp4[^"\s\\]*', script)
+                                        for url_match in urls:
+                                            clean_url = url_match.replace('\\/', '/').replace('\\u0026', '&')
+                                            clean_url = clean_url.split('"')[0].split("'")[0].split('\\')[0]
+                                            if len(clean_url) > 50:
+                                                video_url = clean_url
+                                                if progress_callback:
+                                                    progress_callback(f"Found video in script tag")
+                                                break
+                                        if video_url:
                                             break
 
                             except Exception as e:
                                 if progress_callback:
-                                    progress_callback(f"Error extracting from page: {str(e)[:50]}")
+                                    progress_callback(f"Error extracting: {str(e)[:40]}")
 
                         # Check if we found a video URL
                         if video_url:
