@@ -110,7 +110,7 @@ def main():
 
     # Required packages
     packages = [
-        ("instaloader", "instaloader"),
+        ("yt-dlp", "yt_dlp"),
         ("openai-whisper", "whisper"),
         ("pandas", "pandas"),
         ("openpyxl", "openpyxl"),

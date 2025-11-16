@@ -13,7 +13,7 @@ A powerful desktop application for bulk downloading Instagram reels and transcri
 - **Progress Tracking**: Real-time progress bars and status updates
 - **Error Handling**: Continues processing even if some items fail
 - **Excel Integration**: Read URLs from Excel and write transcriptions back
-- **Session Management**: Optional Instagram login for private content
+- **No Authentication Required**: Uses browser cookies automatically (like Chrome extensions!)
 - **Multiple Whisper Models**: Choose from tiny to large models based on your needs
 - **🚀 Universal GPU Support**: Automatically detects and uses available GPU acceleration
 
@@ -229,15 +229,20 @@ Choose based on your needs:
 | **medium** | Slow | High | ~5 GB | Professional work |
 | **large** | Very Slow | Best | ~10 GB | Maximum accuracy (GPU recommended) |
 
-### Instagram Login (Optional)
+### How Downloading Works (No Login Required!)
 
-For downloading private content or avoiding rate limits:
+The application uses **yt-dlp** to download Instagram reels, automatically extracting cookies from your browser:
 
-1. Check "Login to Instagram"
-2. Enter your Instagram username and password
-3. Credentials are only used during this session (not saved)
+1. **Just stay logged into Instagram** in Chrome, Firefox, Edge, or Safari
+2. The app automatically uses your browser cookies (like Chrome extensions do!)
+3. **No manual authentication needed** - works out of the box for public content
 
-**Security Note**: Your credentials are transmitted directly to Instagram and are not stored or logged.
+**For detailed information**, see [YT_DLP_USAGE_GUIDE.md](YT_DLP_USAGE_GUIDE.md)
+
+**How it works:**
+- The app reads cookies from your browser's local database
+- Uses those cookies to download reels (exactly like browser extensions)
+- No data is sent to external servers - all downloads are direct from Instagram
 
 ## Configuration
 
@@ -289,24 +294,25 @@ instagram-reel-transcriber/
 
 ### 403 Forbidden Error (Instagram Blocking Requests)
 
-If you see errors like `403 Forbidden when accessing https://www.instagram.com/graphql/query`:
+If you see errors like `403 Forbidden`:
 
-**Quick Fix:** Enable Instagram login in the application settings.
+**Quick Fix:** Make sure you're logged into Instagram in Chrome, Firefox, Edge, or Safari.
 
-**For detailed solutions, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)**
+**For detailed solutions, see [YT_DLP_USAGE_GUIDE.md](YT_DLP_USAGE_GUIDE.md)**
 
 ### Common Issues
 
-**1. "403 Forbidden" / "JSON Query" errors**
-- **Solution**: Login with Instagram credentials (check "Login to Instagram")
-- **Alternative**: Install browser_cookie3 and import browser session
-- **See**: [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for complete guide
+**1. "403 Forbidden" errors**
+- **Solution**: Login to Instagram in your browser (Chrome, Firefox, Edge, or Safari)
+- **How it works**: The app automatically uses your browser cookies
+- **See**: [YT_DLP_USAGE_GUIDE.md](YT_DLP_USAGE_GUIDE.md) for complete guide
 
-**2. "FFmpeg not found" error**
+**2. "No browser cookies found" warning**
+- **Solution**: Make sure you're logged into Instagram in one of the supported browsers
+- **Supported**: Chrome, Firefox, Edge, Safari
+
+**3. "FFmpeg not found" error**
 - Solution: Install FFmpeg and add to PATH (see Requirements section)
-
-**3. "Login failed" error**
-- Solution: Check username/password, or try without login for public content
 
 **4. "Out of memory" error**
 - Solution: Use a smaller Whisper model (tiny or base)
@@ -412,7 +418,7 @@ MIT License - see LICENSE file for details
 ## Acknowledgments
 
 - [OpenAI Whisper](https://github.com/openai/whisper) - Speech recognition model
-- [Instaloader](https://github.com/instaloader/instaloader) - Instagram download library
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - Universal media downloader
 - [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) - Modern GUI framework
 
 ## Support

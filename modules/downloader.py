@@ -1,19 +1,18 @@
 """
 Instagram Downloader Module
-Handles downloading Instagram reels using instaloader.
+Handles downloading Instagram reels using yt-dlp (no authentication needed!).
 """
 
-import instaloader
+import yt_dlp
 import os
 import time
 import re
-import random
 from typing import Optional, Callable, List, Tuple
 from pathlib import Path
 
 
 class InstagramDownloader:
-    """Handles downloading Instagram reels using instaloader."""
+    """Handles downloading Instagram reels using yt-dlp."""
 
     def __init__(self, output_folder: str = "./downloads"):
         """
@@ -23,193 +22,47 @@ class InstagramDownloader:
             output_folder: Folder to save downloaded reels
         """
         self.output_folder = output_folder
-        self.loader = None
-        self.session_file = None
-        self.username = None  # Track logged in username
+        self.username = None  # For compatibility with old interface
 
         # Create output folder if it doesn't exist
         os.makedirs(self.output_folder, exist_ok=True)
 
     def setup_instaloader(self, session_file: Optional[str] = None, auto_load_session: bool = True):
         """
-        Initialize instaloader instance with improved anti-bot measures.
+        Dummy method for backward compatibility with GUI.
+        yt-dlp doesn't need setup - it works out of the box!
 
         Args:
-            session_file: Optional path to session file for authenticated downloads
-            auto_load_session: If True, automatically look for session files in config folder
+            session_file: Ignored (kept for compatibility)
+            auto_load_session: Ignored (kept for compatibility)
         """
-        self.loader = instaloader.Instaloader(
-            download_videos=True,
-            download_video_thumbnails=False,
-            download_geotags=False,
-            download_comments=False,
-            save_metadata=False,
-            compress_json=False,
-            post_metadata_txt_pattern="",
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            max_connection_attempts=3,
-            request_timeout=300.0,
-            rate_controller=lambda ctx: time.sleep(min(4.0, max(2.0, random.uniform(2.0, 4.0))))
-        )
-
-        # Set additional context parameters to avoid detection
-        self.loader.context.iphone_support = False
-        # Note: is_logged_in is read-only, set automatically by instaloader
-
-        # Try to load session file
-        loaded_session = False
-
-        # 1. Try explicitly provided session file
-        if session_file and os.path.exists(session_file):
-            try:
-                self.loader.load_session_from_file(session_file)
-                self.session_file = session_file
-                loaded_session = True
-                print(f"Loaded session from: {session_file}")
-            except Exception as e:
-                print(f"Warning: Could not load session file: {e}")
-
-        # 2. Auto-detect session files in config folder
-        elif auto_load_session:
-            config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config")
-            if os.path.exists(config_dir):
-                # Look for any session files
-                for file in os.listdir(config_dir):
-                    if file.startswith("instagram_session_"):
-                        session_path = os.path.join(config_dir, file)
-                        try:
-                            self.loader.load_session_from_file(session_path)
-                            self.session_file = session_path
-                            loaded_session = True
-                            print(f"Auto-loaded session from: {session_path}")
-                            break
-                        except Exception as e:
-                            print(f"Warning: Could not load auto-detected session: {e}")
-                            continue
-
-        if loaded_session:
-            print("✓ Using saved Instagram session (no login required)")
-        else:
-            print("ℹ No session found - you may need to login or create a session")
+        print("✓ Using yt-dlp - no authentication required for public content!")
 
     def login(self, username: str, password: str, two_factor_callback: Optional[Callable[[], str]] = None) -> bool:
         """
-        Login to Instagram with optional 2FA support.
+        Login method for backward compatibility.
+        yt-dlp doesn't need login for public Instagram reels!
 
         Args:
-            username: Instagram username
-            password: Instagram password
-            two_factor_callback: Optional callback function that returns 2FA code when called
+            username: Ignored
+            password: Ignored
+            two_factor_callback: Ignored
 
         Returns:
-            True if login successful, False otherwise
+            Always returns True (no login needed)
         """
-        if self.loader is None:
-            self.setup_instaloader()
-
-        try:
-            # Set 2FA callback if provided
-            if two_factor_callback:
-                self.loader.context.two_factor_auth_pending = False
-
-            self.loader.login(username, password)
-            self.username = username  # Track username for session saving
-            # Note: is_logged_in is read-only, set automatically by instaloader upon successful login
-            return True
-        except instaloader.exceptions.TwoFactorAuthRequiredException:
-            # Handle 2FA
-            if two_factor_callback:
-                try:
-                    two_factor_code = two_factor_callback()
-                    if two_factor_code:
-                        # Instaloader will prompt for 2FA - we need to handle this differently
-                        # The library expects stdin input, so we need to work around this
-                        print(f"2FA required - please handle manually or use session file")
-                        return False
-                    else:
-                        print("2FA code not provided")
-                        return False
-                except Exception as e:
-                    print(f"2FA handling failed: {e}")
-                    return False
-            else:
-                print("2FA required but no callback provided. Please enable 2FA support in GUI.")
-                return False
-        except Exception as e:
-            error_msg = str(e)
-            if "two_factor_required" in error_msg.lower() or "two factor" in error_msg.lower():
-                print(f"Login failed: Two-factor authentication required. Error: {e}")
-                return False
-            print(f"Login failed: {e}")
-            return False
+        print("ℹ️  yt-dlp doesn't require login for public Instagram content")
+        print("✓ Ready to download public reels!")
+        return True
 
     def is_logged_in(self) -> bool:
         """
-        Check if currently logged in to Instagram.
+        Check login status (always False for yt-dlp).
 
         Returns:
-            True if logged in, False otherwise
+            False (yt-dlp doesn't use login)
         """
-        if self.loader is None:
-            return False
-        try:
-            # Check the loader's context for login status
-            return self.loader.context.is_logged_in
-        except:
-            return False
-
-    def save_session(self, username: str, session_path: str):
-        """
-        Save session for future use.
-
-        Args:
-            username: Instagram username
-            session_path: Path to save session file
-        """
-        if self.loader and self.is_logged_in():
-            try:
-                self.loader.save_session_to_file(session_path)
-            except Exception as e:
-                print(f"Failed to save session: {e}")
-
-    def load_session_from_browser(self, username: str, sessionfile: Optional[str] = None):
-        """
-        Load session from browser cookies using instaloader's import functionality.
-
-        This method attempts to import cookies from your browser to avoid 403 errors.
-
-        Args:
-            username: Instagram username to load session for
-            sessionfile: Optional path to load session from
-
-        Returns:
-            True if successful, False otherwise
-        """
-        if self.loader is None:
-            self.setup_instaloader()
-
-        try:
-            # Try to import session from browser
-            import browser_cookie3
-
-            # Get Instagram cookies from browser
-            cookies = browser_cookie3.chrome(domain_name='instagram.com')
-
-            # Load the cookies into instaloader's session
-            for cookie in cookies:
-                self.loader.context._session.cookies.set_cookie(cookie)
-
-            self.is_logged_in = True
-            self.loader.context.is_logged_in = True
-            print("Successfully imported session from browser")
-            return True
-
-        except ImportError:
-            print("browser_cookie3 not installed. Install it with: pip install browser_cookie3")
-            return False
-        except Exception as e:
-            print(f"Failed to import browser session: {e}")
-            return False
+        return False
 
     @staticmethod
     def extract_shortcode_from_url(url: str) -> Optional[str]:
@@ -248,7 +101,7 @@ class InstagramDownloader:
         retry_delay: int = 5
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
-        Download a single Instagram reel.
+        Download a single Instagram reel using yt-dlp.
 
         Args:
             url: Instagram reel URL
@@ -259,9 +112,6 @@ class InstagramDownloader:
         Returns:
             Tuple of (success: bool, video_path: str or None, error_message: str or None)
         """
-        if self.loader is None:
-            self.setup_instaloader()
-
         shortcode = self.extract_shortcode_from_url(url)
         if not shortcode:
             return False, None, f"Invalid Instagram URL: {url}"
@@ -269,118 +119,110 @@ class InstagramDownloader:
         if progress_callback:
             progress_callback(f"Downloading reel: {shortcode}")
 
+        # Create output path
+        output_path = os.path.join(self.output_folder, f"{shortcode}.mp4")
+
+        # yt-dlp options
+        ydl_opts = {
+            'format': 'best[ext=mp4]/best',  # Prefer mp4, fallback to best
+            'outtmpl': output_path,
+            'quiet': True,
+            'no_warnings': True,
+            'retries': max_retries,
+            'fragment_retries': max_retries,
+            'ignoreerrors': False,
+            'nocheckcertificate': True,
+            # Add more headers to look like a real browser
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
+        }
+
+        # Try to use browser cookies (like Chrome extensions do!) to avoid 403 errors
+        # This requires being logged into Instagram in your browser
+        cookies_loaded = False
+        for browser in ['chrome', 'firefox', 'edge', 'safari']:
+            try:
+                # Test if cookies can be loaded
+                with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True, 'cookiesfrombrowser': (browser,)}) as test_ydl:
+                    pass  # Just test if it works
+                ydl_opts['cookiesfrombrowser'] = (browser,)
+                cookies_loaded = True
+                if progress_callback:
+                    progress_callback(f"Using {browser.title()} cookies")
+                break
+            except:
+                # Browser not found or cookies inaccessible, try next
+                continue
+
+        if not cookies_loaded and progress_callback:
+            progress_callback("No browser cookies found - may encounter 403 errors")
+
         # Retry logic
         for attempt in range(max_retries):
             try:
-                # Get post from shortcode
-                post = instaloader.Post.from_shortcode(self.loader.context, shortcode)
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
 
-                # Create a custom folder name for this download
-                download_folder = os.path.join(self.output_folder, shortcode)
-
-                # Download the post
-                self.loader.download_post(post, target=download_folder)
-
-                # Find the downloaded video file
-                video_path = self._find_video_file(download_folder)
-
-                if video_path:
+                # Check if file was downloaded
+                if os.path.exists(output_path):
                     if progress_callback:
                         progress_callback(f"Successfully downloaded: {shortcode}")
-                    return True, video_path, None
+                    return True, output_path, None
                 else:
-                    return False, None, f"Video file not found after download: {shortcode}"
+                    if attempt < max_retries - 1:
+                        if progress_callback:
+                            progress_callback(
+                                f"Download incomplete, retrying... (attempt {attempt + 1}/{max_retries})"
+                            )
+                        time.sleep(retry_delay)
+                    else:
+                        return False, None, f"Video file not found after download: {shortcode}"
 
-            except instaloader.exceptions.LoginRequiredException:
-                return False, None, "Login required to download this content"
+            except yt_dlp.utils.DownloadError as e:
+                error_msg = str(e)
 
-            except instaloader.exceptions.PrivateProfileNotFollowedException:
-                return False, None, "Private profile - cannot download"
-
-            except instaloader.exceptions.PostChangedException:
-                return False, None, "Post has been deleted or is unavailable"
-
-            except instaloader.exceptions.QueryReturnedBadRequestException as e:
-                error_msg = (
-                    "Instagram is blocking requests (403 Forbidden). "
-                    "Please try one of these solutions:\n"
-                    "1. Login with Instagram credentials (enable 'Login to Instagram' option)\n"
-                    "2. Use browser session import: downloader.load_session_from_browser('your_username')\n"
-                    "3. Install browser_cookie3: pip install browser_cookie3\n"
-                    "4. Wait a few minutes before trying again (you may be rate-limited)"
-                )
-                return False, None, error_msg
-
-            except instaloader.exceptions.ConnectionException as e:
-                error_str = str(e).lower()
-                if '403' in error_str or 'forbidden' in error_str:
-                    error_msg = (
-                        "Instagram is blocking requests (403 Forbidden). "
-                        "Please try one of these solutions:\n"
-                        "1. Login with Instagram credentials (enable 'Login to Instagram' option)\n"
-                        "2. Use browser session import: downloader.load_session_from_browser('your_username')\n"
-                        "3. Install browser_cookie3: pip install browser_cookie3\n"
-                        "4. Wait a few minutes before trying again (you may be rate-limited)"
-                    )
-                    return False, None, error_msg
-
-                if attempt < max_retries - 1:
-                    if progress_callback:
-                        progress_callback(
-                            f"Connection error, retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})"
-                        )
-                    time.sleep(retry_delay)
+                # Check for specific errors
+                if "private" in error_msg.lower():
+                    return False, None, "This reel is private - cannot download"
+                elif "not available" in error_msg.lower() or "removed" in error_msg.lower():
+                    return False, None, "Reel has been deleted or is unavailable"
+                elif "403" in error_msg or "forbidden" in error_msg.lower():
+                    if attempt < max_retries - 1:
+                        if progress_callback:
+                            progress_callback(
+                                f"Rate limited, retrying... (attempt {attempt + 1}/{max_retries})"
+                            )
+                        time.sleep(retry_delay * 2)  # Wait longer for rate limits
+                    else:
+                        return False, None, "Instagram blocked the request (403 Forbidden). Try again later."
                 else:
-                    return False, None, f"Connection error after {max_retries} attempts: {str(e)}"
+                    if attempt < max_retries - 1:
+                        if progress_callback:
+                            progress_callback(
+                                f"Error occurred, retrying... (attempt {attempt + 1}/{max_retries})"
+                            )
+                        time.sleep(retry_delay)
+                    else:
+                        return False, None, f"Download failed: {error_msg}"
 
             except Exception as e:
-                error_str = str(e).lower()
-                if '403' in error_str or 'forbidden' in error_str or 'bad request' in error_str:
-                    error_msg = (
-                        "Instagram is blocking requests (403 Forbidden). "
-                        "Please try one of these solutions:\n"
-                        "1. Login with Instagram credentials (enable 'Login to Instagram' option)\n"
-                        "2. Use browser session import: downloader.load_session_from_browser('your_username')\n"
-                        "3. Install browser_cookie3: pip install browser_cookie3\n"
-                        "4. Wait a few minutes before trying again (you may be rate-limited)"
-                    )
-                    return False, None, error_msg
-
                 if attempt < max_retries - 1:
                     if progress_callback:
                         progress_callback(
-                            f"Error occurred, retrying... (attempt {attempt + 1}/{max_retries})"
+                            f"Unexpected error, retrying... (attempt {attempt + 1}/{max_retries})"
                         )
                     time.sleep(retry_delay)
                 else:
                     return False, None, f"Error downloading reel: {str(e)}"
 
         return False, None, "Download failed after all retries"
-
-    def _find_video_file(self, folder: str) -> Optional[str]:
-        """
-        Find the video file in the download folder.
-
-        Args:
-            folder: Folder to search
-
-        Returns:
-            Path to video file if found, None otherwise
-        """
-        if not os.path.exists(folder):
-            return None
-
-        # Look for video files (.mp4 is most common)
-        video_extensions = ['.mp4', '.mov', '.avi', '.mkv']
-
-        for file in os.listdir(folder):
-            file_path = os.path.join(folder, file)
-            if os.path.isfile(file_path):
-                ext = os.path.splitext(file)[1].lower()
-                if ext in video_extensions:
-                    return file_path
-
-        return None
 
     def batch_download(
         self,
@@ -443,6 +285,17 @@ class InstagramDownloader:
             import shutil
             shutil.rmtree(self.output_folder)
             os.makedirs(self.output_folder, exist_ok=True)
+
+    def save_session(self, username: str, session_path: str):
+        """
+        Dummy method for backward compatibility.
+        yt-dlp doesn't use sessions.
+
+        Args:
+            username: Ignored
+            session_path: Ignored
+        """
+        pass
 
 
 # Standalone function for simple use
