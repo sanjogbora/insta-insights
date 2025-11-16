@@ -1,0 +1,30 @@
+# Sample Excel File Template
+# Rename this file to sample_reels.xlsx and add real Instagram URLs
+
+To create your Excel file:
+
+1. Create a new Excel spreadsheet
+2. Add the following columns:
+
+   | Instagram URL | Reel Title | Notes |
+   |--------------|------------|-------|
+   | https://www.instagram.com/reel/YOUR_SHORTCODE/ | My First Reel | Optional notes |
+   | https://www.instagram.com/reel/YOUR_SHORTCODE/ | My Second Reel | Optional notes |
+
+3. Save as .xlsx format
+
+Column Requirements:
+- "Instagram URL" column is required (must contain valid Instagram reel URLs)
+- Other columns are optional but will be preserved
+- The application will add a "Transcription" column with results
+
+URL Format Examples:
+- https://www.instagram.com/reel/ABC123/
+- https://instagram.com/reel/ABC123/
+- https://www.instagram.com/p/ABC123/
+
+Important Notes:
+- Make sure URLs are complete and valid
+- Only public reels can be downloaded without login
+- For private content, enable Instagram login in the app
+- Test with 2-3 reels first before processing large batches
