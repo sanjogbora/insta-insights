@@ -205,22 +205,35 @@ instagram-reel-transcriber/
 
 ## Troubleshooting
 
+### 403 Forbidden Error (Instagram Blocking Requests)
+
+If you see errors like `403 Forbidden when accessing https://www.instagram.com/graphql/query`:
+
+**Quick Fix:** Enable Instagram login in the application settings.
+
+**For detailed solutions, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)**
+
 ### Common Issues
 
-**1. "FFmpeg not found" error**
+**1. "403 Forbidden" / "JSON Query" errors**
+- **Solution**: Login with Instagram credentials (check "Login to Instagram")
+- **Alternative**: Install browser_cookie3 and import browser session
+- **See**: [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for complete guide
+
+**2. "FFmpeg not found" error**
 - Solution: Install FFmpeg and add to PATH (see Requirements section)
 
-**2. "Login failed" error**
+**3. "Login failed" error**
 - Solution: Check username/password, or try without login for public content
 
-**3. "Out of memory" error**
+**4. "Out of memory" error**
 - Solution: Use a smaller Whisper model (tiny or base)
 
-**4. Download fails with rate limiting**
+**5. Download fails with rate limiting**
 - Solution: Increase `DOWNLOAD_DELAY_SECONDS` in settings.py
 - Solution: Enable Instagram login
 
-**5. Transcription is very slow**
+**6. Transcription is very slow**
 - Solution: Use smaller model (tiny or base)
 - Solution: Use GPU if available (install CUDA for nvidia GPUs)
 

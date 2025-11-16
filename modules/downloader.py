@@ -7,6 +7,7 @@ import instaloader
 import os
 import time
 import re
+import random
 from typing import Optional, Callable, List, Tuple
 from pathlib import Path
 
@@ -31,7 +32,7 @@ class InstagramDownloader:
 
     def setup_instaloader(self, session_file: Optional[str] = None):
         """
-        Initialize instaloader instance.
+        Initialize instaloader instance with improved anti-bot measures.
 
         Args:
             session_file: Optional path to session file for authenticated downloads
@@ -43,8 +44,16 @@ class InstagramDownloader:
             download_comments=False,
             save_metadata=False,
             compress_json=False,
-            post_metadata_txt_pattern=""
+            post_metadata_txt_pattern="",
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            max_connection_attempts=3,
+            request_timeout=300.0,
+            rate_controller=lambda ctx: time.sleep(min(4.0, max(2.0, random.uniform(2.0, 4.0))))
         )
+
+        # Set additional context parameters to avoid detection
+        self.loader.context.iphone_support = False
+        self.loader.context.is_logged_in = False
 
         self.session_file = session_file
 
@@ -55,6 +64,7 @@ class InstagramDownloader:
                 # This is a simplified version - actual implementation may vary
                 self.loader.load_session_from_file(session_file)
                 self.is_logged_in = True
+                self.loader.context.is_logged_in = True
             except Exception as e:
                 print(f"Warning: Could not load session file: {e}")
 
@@ -75,6 +85,7 @@ class InstagramDownloader:
         try:
             self.loader.login(username, password)
             self.is_logged_in = True
+            self.loader.context.is_logged_in = True
             return True
         except Exception as e:
             print(f"Login failed: {e}")
@@ -93,6 +104,45 @@ class InstagramDownloader:
                 self.loader.save_session_to_file(session_path)
             except Exception as e:
                 print(f"Failed to save session: {e}")
+
+    def load_session_from_browser(self, username: str, sessionfile: Optional[str] = None):
+        """
+        Load session from browser cookies using instaloader's import functionality.
+
+        This method attempts to import cookies from your browser to avoid 403 errors.
+
+        Args:
+            username: Instagram username to load session for
+            sessionfile: Optional path to load session from
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if self.loader is None:
+            self.setup_instaloader()
+
+        try:
+            # Try to import session from browser
+            import browser_cookie3
+
+            # Get Instagram cookies from browser
+            cookies = browser_cookie3.chrome(domain_name='instagram.com')
+
+            # Load the cookies into instaloader's session
+            for cookie in cookies:
+                self.loader.context._session.cookies.set_cookie(cookie)
+
+            self.is_logged_in = True
+            self.loader.context.is_logged_in = True
+            print("Successfully imported session from browser")
+            return True
+
+        except ImportError:
+            print("browser_cookie3 not installed. Install it with: pip install browser_cookie3")
+            return False
+        except Exception as e:
+            print(f"Failed to import browser session: {e}")
+            return False
 
     @staticmethod
     def extract_shortcode_from_url(url: str) -> Optional[str]:
@@ -183,7 +233,30 @@ class InstagramDownloader:
             except instaloader.exceptions.PostChangedException:
                 return False, None, "Post has been deleted or is unavailable"
 
+            except instaloader.exceptions.QueryReturnedBadRequestException as e:
+                error_msg = (
+                    "Instagram is blocking requests (403 Forbidden). "
+                    "Please try one of these solutions:\n"
+                    "1. Login with Instagram credentials (enable 'Login to Instagram' option)\n"
+                    "2. Use browser session import: downloader.load_session_from_browser('your_username')\n"
+                    "3. Install browser_cookie3: pip install browser_cookie3\n"
+                    "4. Wait a few minutes before trying again (you may be rate-limited)"
+                )
+                return False, None, error_msg
+
             except instaloader.exceptions.ConnectionException as e:
+                error_str = str(e).lower()
+                if '403' in error_str or 'forbidden' in error_str:
+                    error_msg = (
+                        "Instagram is blocking requests (403 Forbidden). "
+                        "Please try one of these solutions:\n"
+                        "1. Login with Instagram credentials (enable 'Login to Instagram' option)\n"
+                        "2. Use browser session import: downloader.load_session_from_browser('your_username')\n"
+                        "3. Install browser_cookie3: pip install browser_cookie3\n"
+                        "4. Wait a few minutes before trying again (you may be rate-limited)"
+                    )
+                    return False, None, error_msg
+
                 if attempt < max_retries - 1:
                     if progress_callback:
                         progress_callback(
@@ -194,6 +267,18 @@ class InstagramDownloader:
                     return False, None, f"Connection error after {max_retries} attempts: {str(e)}"
 
             except Exception as e:
+                error_str = str(e).lower()
+                if '403' in error_str or 'forbidden' in error_str or 'bad request' in error_str:
+                    error_msg = (
+                        "Instagram is blocking requests (403 Forbidden). "
+                        "Please try one of these solutions:\n"
+                        "1. Login with Instagram credentials (enable 'Login to Instagram' option)\n"
+                        "2. Use browser session import: downloader.load_session_from_browser('your_username')\n"
+                        "3. Install browser_cookie3: pip install browser_cookie3\n"
+                        "4. Wait a few minutes before trying again (you may be rate-limited)"
+                    )
+                    return False, None, error_msg
+
                 if attempt < max_retries - 1:
                     if progress_callback:
                         progress_callback(
