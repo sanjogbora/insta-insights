@@ -7,6 +7,7 @@ Zero authentication required - works like visiting Instagram in your browser!
 import os
 import time
 import re
+import json
 import requests
 from typing import Optional, Callable, List, Tuple
 from pathlib import Path
@@ -196,25 +197,87 @@ class InstagramDownloader:
                             progress_callback(f"Loading Instagram page...")
 
                         # Navigate to the reel
-                        page.goto(url, wait_until='networkidle', timeout=30000)
+                        page.goto(url, wait_until='domcontentloaded', timeout=30000)
 
-                        # Wait for video to load
+                        # Wait a bit for JavaScript to load
                         time.sleep(3)
 
-                        # Try to find and click play button (sometimes needed)
+                        # Try to find video element and trigger playback
                         try:
-                            play_button = page.query_selector('button[aria-label*="Play"], video')
-                            if play_button:
-                                play_button.click()
+                            # Look for video element
+                            video_elem = page.query_selector('video')
+                            if video_elem:
+                                # Try to get src directly
+                                video_src = video_elem.get_attribute('src')
+                                if video_src and ('http' in video_src):
+                                    if not video_url:
+                                        video_url = video_src
+                                        if progress_callback:
+                                            progress_callback(f"Found video in DOM")
+
+                                # Try to play the video to trigger network requests
+                                page.evaluate('document.querySelector("video")?.play()')
                                 time.sleep(2)
                         except:
-                            pass  # Play button might not exist
+                            pass
 
-                        # Scroll a bit to trigger video load
+                        # Scroll to trigger lazy loading
                         page.evaluate('window.scrollTo(0, 100)')
-                        time.sleep(2)
+                        time.sleep(1)
 
-                        # Check if we captured video URL
+                        # If still no video URL, try extracting from page source
+                        if not video_url:
+                            if progress_callback:
+                                progress_callback(f"Extracting video URL from page source...")
+
+                            try:
+                                # Get page content
+                                page_content = page.content()
+
+                                # Look for video URL patterns in the HTML
+                                # Pattern 1: Look for "video_url":"..." in script tags
+                                video_url_matches = re.findall(r'"video_url":"([^"]+)"', page_content)
+                                for match in video_url_matches:
+                                    # Unescape URL
+                                    url_unescaped = match.replace('\\/', '/')
+                                    if 'cdninstagram.com' in url_unescaped or 'fbcdn.net' in url_unescaped:
+                                        video_url = url_unescaped
+                                        if progress_callback:
+                                            progress_callback(f"Extracted video URL from page source")
+                                        break
+
+                                # Pattern 2: Look for video in JSON-LD
+                                if not video_url:
+                                    ld_json_matches = re.findall(r'<script type="application/ld\+json">(.+?)</script>', page_content, re.DOTALL)
+                                    for ld_json in ld_json_matches:
+                                        try:
+                                            data = json.loads(ld_json)
+                                            if isinstance(data, dict) and 'video' in data:
+                                                for video_data in data.get('video', []):
+                                                    if isinstance(video_data, dict) and 'contentUrl' in video_data:
+                                                        video_url = video_data['contentUrl']
+                                                        if progress_callback:
+                                                            progress_callback(f"Found video in JSON-LD")
+                                                        break
+                                        except:
+                                            continue
+
+                                # Pattern 3: Look for direct .mp4 URLs
+                                if not video_url:
+                                    mp4_matches = re.findall(r'(https://[^"\s]+\.mp4[^"\s]*)', page_content)
+                                    for match in mp4_matches:
+                                        clean_url = match.split('"')[0].split("'")[0]
+                                        if 'cdninstagram.com' in clean_url or 'fbcdn.net' in clean_url:
+                                            video_url = clean_url
+                                            if progress_callback:
+                                                progress_callback(f"Found .mp4 URL in page")
+                                            break
+
+                            except Exception as e:
+                                if progress_callback:
+                                    progress_callback(f"Error extracting from page: {str(e)[:50]}")
+
+                        # Check if we found a video URL
                         if video_url:
                             if progress_callback:
                                 progress_callback(f"Found video URL, downloading...")
@@ -248,13 +311,7 @@ class InstagramDownloader:
 
                         else:
                             browser.close()
-
-                            # Try alternative: look for video element in page
-                            if progress_callback:
-                                progress_callback(f"Video URL not captured, trying alternative method...")
-
-                            # This is a fallback - might not always work
-                            raise Exception("Could not capture video URL from network requests")
+                            raise Exception("Could not find video URL - reel might be private or deleted")
 
                     except PlaywrightTimeout:
                         browser.close()
