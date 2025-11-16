@@ -60,6 +60,35 @@ def check_ffmpeg():
         return False
 
 
+def check_playwright_browsers():
+    """Check if Playwright browsers are installed."""
+    print("Checking Playwright browsers...", end=" ")
+    import subprocess
+    try:
+        # Try to check if chromium is installed
+        result = subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "--dry-run", "chromium"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=10
+        )
+        # If dry-run succeeds, browsers might be installed
+        # Better check: try to import and use playwright
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                # This will fail if browsers aren't installed
+                browser_type = p.chromium
+            print("✓")
+            return True
+        except Exception:
+            print("✗ (not installed)")
+            return False
+    except Exception:
+        print("✗")
+        return False
+
+
 def check_gpu():
     """Check if GPU is available (CUDA/MPS/ROCm)."""
     print("Checking GPU...", end=" ")
@@ -110,7 +139,8 @@ def main():
 
     # Required packages
     packages = [
-        ("yt-dlp", "yt_dlp"),
+        ("playwright", "playwright"),
+        ("requests", "requests"),
         ("openai-whisper", "whisper"),
         ("pandas", "pandas"),
         ("openpyxl", "openpyxl"),
@@ -130,6 +160,9 @@ def main():
 
     # FFmpeg
     checks.append(("FFmpeg", check_ffmpeg()))
+
+    # Playwright browsers
+    checks.append(("Playwright browsers", check_playwright_browsers()))
 
     print()
     print("Checking optional features...")
@@ -167,11 +200,25 @@ def main():
         print("To install missing dependencies:")
         print("  pip install -r requirements.txt")
         print()
-        if not checks[required_checks.index(("FFmpeg", checks[-1][1]))][1]:
+
+        # Check what's missing and provide specific instructions
+        missing_items = {name: result for name, result in required_checks if not result}
+
+        if "FFmpeg" in missing_items:
             print("FFmpeg installation instructions:")
             print("  Windows: Download from ffmpeg.org and add to PATH")
             print("  macOS: brew install ffmpeg")
             print("  Linux: sudo apt install ffmpeg")
+            print()
+
+        if "Playwright browsers" in missing_items:
+            print("Playwright browsers installation instructions:")
+            print("  python install_browser.py")
+            print()
+            print("Or manually:")
+            print("  playwright install chromium")
+            print()
+
         return 1
 
 

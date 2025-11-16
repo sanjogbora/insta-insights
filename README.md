@@ -13,7 +13,7 @@ A powerful desktop application for bulk downloading Instagram reels and transcri
 - **Progress Tracking**: Real-time progress bars and status updates
 - **Error Handling**: Continues processing even if some items fail
 - **Excel Integration**: Read URLs from Excel and write transcriptions back
-- **No Authentication Required**: Uses browser cookies automatically (like Chrome extensions!)
+- **Zero Authentication**: Uses browser automation - no login, no cookies, no setup!
 - **Multiple Whisper Models**: Choose from tiny to large models based on your needs
 - **🚀 Universal GPU Support**: Automatically detects and uses available GPU acceleration
 
@@ -177,6 +177,22 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### 4. Install Playwright Browser (One-Time Setup)
+
+After installing Python dependencies, install the browser:
+
+```bash
+python install_browser.py
+```
+
+Or manually:
+
+```bash
+playwright install chromium
+```
+
+This downloads Chromium (~300MB) - you only need to do this **once**.
+
 **Note**: The first time you run the application, Whisper will download the selected model (500MB - 3GB depending on model size).
 
 ## Usage
@@ -229,24 +245,31 @@ Choose based on your needs:
 | **medium** | Slow | High | ~5 GB | Professional work |
 | **large** | Very Slow | Best | ~10 GB | Maximum accuracy (GPU recommended) |
 
-### How Downloading Works (No Login Required!)
+### How Downloading Works (Zero Authentication!)
 
-The application uses **yt-dlp** to download Instagram reels, automatically extracting cookies from your browser:
+The application uses **Playwright browser automation** to download Instagram reels:
 
-1. **Just stay logged into Instagram** in Firefox (recommended), Edge, Safari, or Chrome
-2. The app automatically uses your browser cookies (like Chrome extensions do!)
-3. **No manual authentication needed** - works out of the box for public content
-
-**Recommended:** Use **Firefox** for the best experience (it handles concurrent access better than Chrome)
-
-**Chrome users:** If you see a "cookie database locked" error, either close Chrome or use Firefox instead.
-
-**For detailed information**, see [YT_DLP_USAGE_GUIDE.md](YT_DLP_USAGE_GUIDE.md)
+**Zero authentication required!**
+- No login needed
+- No cookies to manage
+- No browser sessions
+- No 2FA codes
 
 **How it works:**
-- The app reads cookies from your browser's local database
-- Uses those cookies to download reels (exactly like browser extensions)
-- No data is sent to external servers - all downloads are direct from Instagram
+1. Launches a headless browser (invisible Chrome)
+2. Visits the Instagram reel page (like a real browser)
+3. Captures the video URL from network requests
+4. Downloads the video directly
+
+**Just like visiting Instagram in your browser** - but automated!
+
+**For detailed information**, see [PLAYWRIGHT_USAGE_GUIDE.md](PLAYWRIGHT_USAGE_GUIDE.md)
+
+**Why Playwright?**
+- Most reliable method (acts like real browser)
+- Works for all public Instagram reels
+- No complicated setup or authentication
+- Instagram sees it as a normal visitor
 
 ## Configuration
 
@@ -296,24 +319,28 @@ instagram-reel-transcriber/
 
 ## Troubleshooting
 
-### 403 Forbidden Error (Instagram Blocking Requests)
+### Playwright Browsers Not Installed
 
-If you see errors like `403 Forbidden`:
+If you see errors about missing browsers:
 
-**Quick Fix:** Make sure you're logged into Instagram in Chrome, Firefox, Edge, or Safari.
+**Quick Fix:** Run the browser installation script:
+```bash
+python install_browser.py
+```
 
-**For detailed solutions, see [YT_DLP_USAGE_GUIDE.md](YT_DLP_USAGE_GUIDE.md)**
+**For detailed solutions, see [PLAYWRIGHT_USAGE_GUIDE.md](PLAYWRIGHT_USAGE_GUIDE.md)**
 
 ### Common Issues
 
-**1. "403 Forbidden" errors**
-- **Solution**: Login to Instagram in your browser (Chrome, Firefox, Edge, or Safari)
-- **How it works**: The app automatically uses your browser cookies
-- **See**: [YT_DLP_USAGE_GUIDE.md](YT_DLP_USAGE_GUIDE.md) for complete guide
+**1. "Playwright browsers not installed" error**
+- **Solution**: Run `python install_browser.py` (one-time setup)
+- **Or manually**: `playwright install chromium`
+- **See**: [PLAYWRIGHT_USAGE_GUIDE.md](PLAYWRIGHT_USAGE_GUIDE.md) for complete guide
 
-**2. "No browser cookies found" warning**
-- **Solution**: Make sure you're logged into Instagram in one of the supported browsers
-- **Supported**: Chrome, Firefox, Edge, Safari
+**2. "Timeout while loading Instagram page"**
+- **Solution**: Check your internet connection and try again
+- The app retries 3 times automatically
+- Instagram might be slow or temporarily down
 
 **3. "FFmpeg not found" error**
 - Solution: Install FFmpeg and add to PATH (see Requirements section)
@@ -422,7 +449,7 @@ MIT License - see LICENSE file for details
 ## Acknowledgments
 
 - [OpenAI Whisper](https://github.com/openai/whisper) - Speech recognition model
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - Universal media downloader
+- [Playwright](https://github.com/microsoft/playwright-python) - Browser automation framework
 - [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) - Modern GUI framework
 
 ## Support

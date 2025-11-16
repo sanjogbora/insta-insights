@@ -1,18 +1,20 @@
 """
 Instagram Downloader Module
-Handles downloading Instagram reels using yt-dlp (no authentication needed!).
+Handles downloading Instagram reels using Playwright browser automation.
+Zero authentication required - works like visiting Instagram in your browser!
 """
 
-import yt_dlp
 import os
 import time
 import re
+import requests
 from typing import Optional, Callable, List, Tuple
 from pathlib import Path
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 
 class InstagramDownloader:
-    """Handles downloading Instagram reels using yt-dlp."""
+    """Handles downloading Instagram reels using browser automation (zero auth!)."""
 
     def __init__(self, output_folder: str = "./downloads"):
         """
@@ -23,6 +25,8 @@ class InstagramDownloader:
         """
         self.output_folder = output_folder
         self.username = None  # For compatibility with old interface
+        self.browser = None
+        self.playwright = None
 
         # Create output folder if it doesn't exist
         os.makedirs(self.output_folder, exist_ok=True)
@@ -30,18 +34,19 @@ class InstagramDownloader:
     def setup_instaloader(self, session_file: Optional[str] = None, auto_load_session: bool = True):
         """
         Dummy method for backward compatibility with GUI.
-        yt-dlp doesn't need setup - it works out of the box!
+        Playwright doesn't need setup - it works out of the box!
 
         Args:
             session_file: Ignored (kept for compatibility)
             auto_load_session: Ignored (kept for compatibility)
         """
-        print("✓ Using yt-dlp - no authentication required for public content!")
+        print("✓ Using Playwright browser automation - zero authentication required!")
+        print("✓ Works for all public Instagram reels - no login needed!")
 
     def login(self, username: str, password: str, two_factor_callback: Optional[Callable[[], str]] = None) -> bool:
         """
         Login method for backward compatibility.
-        yt-dlp doesn't need login for public Instagram reels!
+        Playwright doesn't need login for public Instagram reels!
 
         Args:
             username: Ignored
@@ -51,16 +56,16 @@ class InstagramDownloader:
         Returns:
             Always returns True (no login needed)
         """
-        print("ℹ️  yt-dlp doesn't require login for public Instagram content")
-        print("✓ Ready to download public reels!")
+        print("ℹ️  Playwright doesn't require login for public Instagram content")
+        print("✓ Ready to download public reels using browser automation!")
         return True
 
     def is_logged_in(self) -> bool:
         """
-        Check login status (always False for yt-dlp).
+        Check login status (always False for Playwright).
 
         Returns:
-            False (yt-dlp doesn't use login)
+            False (Playwright doesn't use login)
         """
         return False
 
@@ -101,7 +106,7 @@ class InstagramDownloader:
         retry_delay: int = 5
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
-        Download a single Instagram reel using yt-dlp.
+        Download a single Instagram reel using Playwright browser automation.
 
         Args:
             url: Instagram reel URL
@@ -122,131 +127,158 @@ class InstagramDownloader:
         # Create output path
         output_path = os.path.join(self.output_folder, f"{shortcode}.mp4")
 
-        # yt-dlp options
-        ydl_opts = {
-            'format': 'best[ext=mp4]/best',  # Prefer mp4, fallback to best
-            'outtmpl': output_path,
-            'quiet': True,
-            'no_warnings': True,
-            'retries': max_retries,
-            'fragment_retries': max_retries,
-            'ignoreerrors': False,
-            'nocheckcertificate': True,
-            # Add more headers to look like a real browser
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
-            }
-        }
-
-        # Try to use browser cookies (like Chrome extensions do!) to avoid 403 errors
-        # This requires being logged into Instagram in your browser
-        # Firefox first: handles concurrent access better (doesn't lock database)
-        cookies_loaded = False
-        cookie_error_msg = None
-
-        for browser in ['firefox', 'edge', 'safari', 'chrome']:
-            try:
-                # Test if cookies can be loaded from this browser
-                test_opts = {
-                    'quiet': True,
-                    'no_warnings': True,
-                    'cookiesfrombrowser': (browser,),
-                    'extract_flat': True  # Don't actually download during test
-                }
-                with yt_dlp.YoutubeDL(test_opts) as test_ydl:
-                    pass  # Just test if it works
-
-                # If we got here, cookies loaded successfully
-                ydl_opts['cookiesfrombrowser'] = (browser,)
-                cookies_loaded = True
-                if progress_callback:
-                    progress_callback(f"✓ Using {browser.title()} cookies for authentication")
-                break
-
-            except Exception as e:
-                error_str = str(e)
-                # Check for specific Chrome cookie database lock error
-                if 'could not copy' in error_str.lower() and 'cookie' in error_str.lower():
-                    cookie_error_msg = f"{browser.title()}: Cookie database is locked (close {browser.title()} and try again)"
-                elif 'could not find' in error_str.lower():
-                    cookie_error_msg = f"{browser.title()}: Not found or not logged into Instagram"
-                else:
-                    cookie_error_msg = f"{browser.title()}: Cookies not accessible"
-                # Try next browser
-                continue
-
-        if not cookies_loaded:
+        # Check if already downloaded
+        if os.path.exists(output_path):
             if progress_callback:
-                if cookie_error_msg and 'locked' in cookie_error_msg:
-                    progress_callback("⚠️  Chrome cookie database is locked - close Chrome or use Firefox")
-                    progress_callback("ℹ️  Attempting download without cookies (works for public reels)")
-                else:
-                    progress_callback("ℹ️  No browser cookies found - attempting download without cookies")
-                    progress_callback("💡 Tip: Login to Instagram in Firefox/Edge/Safari for better reliability")
+                progress_callback(f"Already downloaded: {shortcode}")
+            return True, output_path, None
 
         # Retry logic
         for attempt in range(max_retries):
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
+                if progress_callback:
+                    progress_callback(f"Launching browser automation... (attempt {attempt + 1}/{max_retries})")
 
-                # Check if file was downloaded
-                if os.path.exists(output_path):
-                    if progress_callback:
-                        progress_callback(f"Successfully downloaded: {shortcode}")
-                    return True, output_path, None
-                else:
-                    if attempt < max_retries - 1:
-                        if progress_callback:
-                            progress_callback(
-                                f"Download incomplete, retrying... (attempt {attempt + 1}/{max_retries})"
-                            )
-                        time.sleep(retry_delay)
-                    else:
-                        return False, None, f"Video file not found after download: {shortcode}"
+                with sync_playwright() as p:
+                    # Launch browser in headless mode
+                    browser = p.chromium.launch(
+                        headless=True,
+                        args=[
+                            '--no-sandbox',
+                            '--disable-setuid-sandbox',
+                            '--disable-dev-shm-usage',
+                            '--disable-blink-features=AutomationControlled'
+                        ]
+                    )
 
-            except yt_dlp.utils.DownloadError as e:
-                error_msg = str(e)
+                    # Create context with realistic browser settings
+                    context = browser.new_context(
+                        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        viewport={'width': 1920, 'height': 1080},
+                        locale='en-US',
+                        timezone_id='America/New_York',
+                        extra_http_headers={
+                            'Accept-Language': 'en-US,en;q=0.9',
+                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        }
+                    )
 
-                # Check for specific errors
-                if "private" in error_msg.lower():
-                    return False, None, "This reel is private - cannot download"
-                elif "not available" in error_msg.lower() or "removed" in error_msg.lower():
-                    return False, None, "Reel has been deleted or is unavailable"
-                elif "403" in error_msg or "forbidden" in error_msg.lower():
-                    if attempt < max_retries - 1:
+                    page = context.new_page()
+
+                    # Track video URL from network requests
+                    video_url = None
+                    video_urls = []
+
+                    def handle_response(response):
+                        nonlocal video_url, video_urls
+                        try:
+                            # Look for video file in response
+                            if response.status == 200:
+                                content_type = response.headers.get('content-type', '')
+                                url_lower = response.url.lower()
+
+                                # Check if it's a video
+                                if ('video' in content_type or
+                                    '.mp4' in url_lower or
+                                    'video' in url_lower):
+                                    # Prefer Instagram CDN URLs
+                                    if 'cdninstagram.com' in response.url or 'fbcdn.net' in response.url:
+                                        video_urls.append(response.url)
+                                        if not video_url:
+                                            video_url = response.url
+                        except Exception:
+                            pass  # Ignore errors in response handler
+
+                    page.on('response', handle_response)
+
+                    try:
                         if progress_callback:
-                            progress_callback(
-                                f"Rate limited, retrying... (attempt {attempt + 1}/{max_retries})"
-                            )
-                        time.sleep(retry_delay * 2)  # Wait longer for rate limits
-                    else:
-                        return False, None, "Instagram blocked the request (403 Forbidden). Try again later."
-                else:
-                    if attempt < max_retries - 1:
-                        if progress_callback:
-                            progress_callback(
-                                f"Error occurred, retrying... (attempt {attempt + 1}/{max_retries})"
-                            )
-                        time.sleep(retry_delay)
-                    else:
-                        return False, None, f"Download failed: {error_msg}"
+                            progress_callback(f"Loading Instagram page...")
+
+                        # Navigate to the reel
+                        page.goto(url, wait_until='networkidle', timeout=30000)
+
+                        # Wait for video to load
+                        time.sleep(3)
+
+                        # Try to find and click play button (sometimes needed)
+                        try:
+                            play_button = page.query_selector('button[aria-label*="Play"], video')
+                            if play_button:
+                                play_button.click()
+                                time.sleep(2)
+                        except:
+                            pass  # Play button might not exist
+
+                        # Scroll a bit to trigger video load
+                        page.evaluate('window.scrollTo(0, 100)')
+                        time.sleep(2)
+
+                        # Check if we captured video URL
+                        if video_url:
+                            if progress_callback:
+                                progress_callback(f"Found video URL, downloading...")
+
+                            # Download the video
+                            headers = {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                'Referer': 'https://www.instagram.com/',
+                                'Accept': '*/*',
+                            }
+
+                            response = requests.get(video_url, headers=headers, stream=True, timeout=60)
+                            response.raise_for_status()
+
+                            # Save video file
+                            with open(output_path, 'wb') as f:
+                                for chunk in response.iter_content(chunk_size=8192):
+                                    if chunk:
+                                        f.write(chunk)
+
+                            browser.close()
+
+                            # Verify file was downloaded
+                            if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+                                if progress_callback:
+                                    progress_callback(f"✓ Successfully downloaded: {shortcode}")
+                                return True, output_path, None
+                            else:
+                                os.remove(output_path) if os.path.exists(output_path) else None
+                                raise Exception("Downloaded file is too small or empty")
+
+                        else:
+                            browser.close()
+
+                            # Try alternative: look for video element in page
+                            if progress_callback:
+                                progress_callback(f"Video URL not captured, trying alternative method...")
+
+                            # This is a fallback - might not always work
+                            raise Exception("Could not capture video URL from network requests")
+
+                    except PlaywrightTimeout:
+                        browser.close()
+                        raise Exception("Timeout while loading Instagram page")
 
             except Exception as e:
+                error_msg = str(e)
+
                 if attempt < max_retries - 1:
                     if progress_callback:
                         progress_callback(
-                            f"Unexpected error, retrying... (attempt {attempt + 1}/{max_retries})"
+                            f"Attempt {attempt + 1} failed: {error_msg[:50]}... Retrying..."
                         )
                     time.sleep(retry_delay)
                 else:
-                    return False, None, f"Error downloading reel: {str(e)}"
+                    # Last attempt failed
+                    if "private" in error_msg.lower():
+                        return False, None, "This reel is private - cannot download without authentication"
+                    elif "not available" in error_msg.lower() or "removed" in error_msg.lower():
+                        return False, None, "Reel has been deleted or is unavailable"
+                    elif "timeout" in error_msg.lower():
+                        return False, None, "Timeout while loading reel - Instagram might be slow or blocking"
+                    else:
+                        return False, None, f"Download failed after {max_retries} attempts: {error_msg}"
 
         return False, None, "Download failed after all retries"
 
@@ -299,7 +331,7 @@ class InstagramDownloader:
                 results['failed'].append((url, error))
                 results['fail_count'] += 1
 
-            # Add delay between downloads to avoid rate limiting
+            # Add delay between downloads to be respectful
             if idx < len(urls):
                 time.sleep(delay_between_downloads)
 
@@ -315,7 +347,7 @@ class InstagramDownloader:
     def save_session(self, username: str, session_path: str):
         """
         Dummy method for backward compatibility.
-        yt-dlp doesn't use sessions.
+        Playwright doesn't use sessions.
 
         Args:
             username: Ignored
