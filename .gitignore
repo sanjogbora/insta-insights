@@ -44,6 +44,7 @@ logs/
 # Instagram session
 config/instagram_session.json
 config/*.json
+instagram_cookies.txt
 
 # Excel files (for testing, remove if you want to track them)
 *.xlsx

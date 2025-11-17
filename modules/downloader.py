@@ -155,51 +155,68 @@ class InstagramDownloader:
             }
         }
 
-        # Try to load browser cookies
+        # Try to load cookies
         cookies_loaded = False
 
-        if self.selected_browser == "auto":
-            # Try browsers in order: Firefox → Edge → Safari → Chrome
-            browsers_to_try = ['firefox', 'edge', 'safari', 'chrome']
-        else:
-            # Use user-selected browser
-            browsers_to_try = [self.selected_browser]
-
-        for browser in browsers_to_try:
+        # PRIORITY 1: Check for manual cookie file (bypasses Windows DPAPI encryption)
+        cookie_file_path = Path(__file__).parent.parent / 'instagram_cookies.txt'
+        if cookie_file_path.exists():
             try:
-                # Test if cookies can be loaded
-                test_opts = {
-                    'quiet': True,
-                    'no_warnings': True,
-                    'cookiesfrombrowser': (browser,),
-                    'extract_flat': True
-                }
-                with yt_dlp.YoutubeDL(test_opts) as test_ydl:
-                    pass  # Just test if it works
-
-                # Success! Use this browser
-                ydl_opts['cookiesfrombrowser'] = (browser,)
+                ydl_opts['cookiefile'] = str(cookie_file_path)
                 cookies_loaded = True
-                self.browser_in_use = browser
+                self.browser_in_use = "manual_cookies"
                 if progress_callback:
-                    progress_callback(f"✓ Using {browser.title()} session")
-                break
-
+                    progress_callback("✓ Using manual cookie file (instagram_cookies.txt)")
             except Exception as e:
-                error_str = str(e)
-                if 'could not copy' in error_str.lower() and browser == 'chrome':
-                    if progress_callback and self.selected_browser == browser:
-                        progress_callback(f"⚠️  {browser.title()} is running - close it or select another browser")
-                continue
+                if progress_callback:
+                    progress_callback(f"⚠️  Manual cookie file found but error: {str(e)[:100]}")
+
+        # PRIORITY 2: Try browser cookies (only if manual cookie file not found)
+        if not cookies_loaded:
+            if self.selected_browser == "auto":
+                # Try browsers in order: Firefox → Edge → Safari → Chrome
+                browsers_to_try = ['firefox', 'edge', 'safari', 'chrome']
+            else:
+                # Use user-selected browser
+                browsers_to_try = [self.selected_browser]
+
+            for browser in browsers_to_try:
+                try:
+                    # Test if cookies can be loaded
+                    test_opts = {
+                        'quiet': True,
+                        'no_warnings': True,
+                        'cookiesfrombrowser': (browser,),
+                        'extract_flat': True
+                    }
+                    with yt_dlp.YoutubeDL(test_opts) as test_ydl:
+                        pass  # Just test if it works
+
+                    # Success! Use this browser
+                    ydl_opts['cookiesfrombrowser'] = (browser,)
+                    cookies_loaded = True
+                    self.browser_in_use = browser
+                    if progress_callback:
+                        progress_callback(f"✓ Using {browser.title()} session")
+                    break
+
+                except Exception as e:
+                    error_str = str(e)
+                    if 'could not copy' in error_str.lower() and browser == 'chrome':
+                        if progress_callback and self.selected_browser == browser:
+                            progress_callback(f"⚠️  {browser.title()} is running - close it or select another browser")
+                    continue
 
         if not cookies_loaded:
             if progress_callback:
                 if self.selected_browser != "auto":
                     progress_callback(f"⚠️  Could not load {self.selected_browser.title()} session")
                     progress_callback(f"ℹ️  Make sure you're logged into Instagram in {self.selected_browser.title()}")
+                    progress_callback("💡 OR: Export cookies manually (see export_cookies_instructions.md)")
                 else:
                     progress_callback("⚠️  No browser sessions found")
-                    progress_callback("💡 Use 'Import Browser Session' button to select your browser")
+                    progress_callback("💡 Solution: Export cookies manually (see export_cookies_instructions.md)")
+                    progress_callback("ℹ️  Save as 'instagram_cookies.txt' in project folder")
 
         # Retry logic
         for attempt in range(max_retries):
