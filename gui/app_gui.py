@@ -217,6 +217,38 @@ class InstagramTranscriberApp(ctk.CTk):
         )
         self.device_speed_label.pack(side="left", padx=10)
 
+        # Browser Session Import
+        browser_frame = ctk.CTkFrame(settings_frame)
+        browser_frame.pack(fill="x", padx=10, pady=5)
+
+        browser_label = ctk.CTkLabel(browser_frame, text="Browser Session:", font=ctk.CTkFont(weight="bold"))
+        browser_label.pack(side="left", padx=10)
+
+        self.browser_var = ctk.StringVar(value="auto")
+        self.browser_dropdown = ctk.CTkOptionMenu(
+            browser_frame,
+            values=["auto", "chrome", "firefox", "edge", "safari"],
+            variable=self.browser_var,
+            command=self.on_browser_changed,
+            width=120
+        )
+        self.browser_dropdown.pack(side="left", padx=5)
+
+        self.import_browser_button = ctk.CTkButton(
+            browser_frame,
+            text="Import Browser Session",
+            command=self.import_browser_session,
+            width=180
+        )
+        self.import_browser_button.pack(side="left", padx=5)
+
+        self.browser_status_label = ctk.CTkLabel(
+            browser_frame,
+            text="Auto-detect from open browsers",
+            text_color="gray"
+        )
+        self.browser_status_label.pack(side="left", padx=10)
+
         # Instagram login option
         login_frame = ctk.CTkFrame(settings_frame)
         login_frame.pack(fill="x", padx=10, pady=5)
@@ -398,6 +430,128 @@ class InstagramTranscriberApp(ctk.CTk):
         else:
             self.credentials_frame.pack_forget()
 
+    def on_browser_changed(self, choice):
+        """Update browser status label when browser is changed."""
+        browser_descriptions = {
+            "auto": "Auto-detect from open browsers",
+            "chrome": "Use Google Chrome session",
+            "firefox": "Use Mozilla Firefox session",
+            "edge": "Use Microsoft Edge session",
+            "safari": "Use Apple Safari session"
+        }
+        description = browser_descriptions.get(choice, "")
+        self.browser_status_label.configure(text=description)
+
+    def import_browser_session(self):
+        """Import browser session for Instagram authentication."""
+        selected_browser = self.browser_var.get()
+
+        # Show loading state
+        original_text = self.import_browser_button.cget("text")
+        self.import_browser_button.configure(text="Importing...", state="disabled")
+        self.browser_status_label.configure(text="Testing browser session...", text_color="orange")
+
+        def test_browser():
+            """Test browser session in separate thread."""
+            try:
+                # Create a test downloader with selected browser
+                test_downloader = InstagramDownloader(self.download_folder, selected_browser)
+
+                # Try to detect browser cookies
+                if selected_browser == "auto":
+                    browsers_to_try = ['firefox', 'edge', 'safari', 'chrome']
+                else:
+                    browsers_to_try = [selected_browser]
+
+                browser_found = None
+                for browser in browsers_to_try:
+                    try:
+                        import yt_dlp
+                        test_opts = {
+                            'quiet': True,
+                            'no_warnings': True,
+                            'cookiesfrombrowser': (browser,),
+                            'extract_flat': True
+                        }
+                        with yt_dlp.YoutubeDL(test_opts) as test_ydl:
+                            pass
+                        browser_found = browser
+                        break
+                    except:
+                        continue
+
+                # Update UI in main thread
+                self.after(0, lambda: self._update_browser_import_result(browser_found, selected_browser, original_text))
+
+            except Exception as e:
+                self.after(0, lambda: self._update_browser_import_error(str(e), original_text))
+
+        # Run test in separate thread
+        thread = threading.Thread(target=test_browser, daemon=True)
+        thread.start()
+
+    def _update_browser_import_result(self, browser_found, selected_browser, original_button_text):
+        """Update UI after browser session test."""
+        self.import_browser_button.configure(text=original_button_text, state="normal")
+
+        if browser_found:
+            # Success!
+            if selected_browser == "auto":
+                message = f"✓ Found {browser_found.title()} session"
+                self.log_status(f"Successfully imported {browser_found.title()} browser session")
+            else:
+                message = f"✓ {browser_found.title()} session ready"
+                self.log_status(f"Successfully imported {selected_browser.title()} browser session")
+
+            self.browser_status_label.configure(text=message, text_color="green")
+
+            # Update downloader if it exists
+            if self.downloader:
+                self.downloader.set_browser(selected_browser)
+
+            messagebox.showinfo(
+                "Success",
+                f"Browser session imported successfully!\n\nUsing: {browser_found.title()}\n\n"
+                f"Make sure you're logged into Instagram in {browser_found.title()}."
+            )
+        else:
+            # No browser session found
+            if selected_browser == "auto":
+                message = "⚠️ No browser sessions found"
+                self.log_status("Could not find any browser sessions with Instagram cookies")
+                messagebox.showwarning(
+                    "No Browser Session Found",
+                    "Could not find Instagram session in any browser.\n\n"
+                    "Please:\n"
+                    "1. Open Chrome, Firefox, Edge, or Safari\n"
+                    "2. Login to Instagram (instagram.com)\n"
+                    "3. Try importing again"
+                )
+            else:
+                message = f"⚠️ {selected_browser.title()} session not found"
+                self.log_status(f"Could not find {selected_browser.title()} session with Instagram cookies")
+                messagebox.showwarning(
+                    f"{selected_browser.title()} Session Not Found",
+                    f"Could not find Instagram session in {selected_browser.title()}.\n\n"
+                    f"Please:\n"
+                    f"1. Open {selected_browser.title()}\n"
+                    f"2. Login to Instagram (instagram.com)\n"
+                    f"3. Keep {selected_browser.title()} open if using Chrome\n"
+                    f"4. Try importing again"
+                )
+
+            self.browser_status_label.configure(text=message, text_color="orange")
+
+    def _update_browser_import_error(self, error_msg, original_button_text):
+        """Update UI after browser session test error."""
+        self.import_browser_button.configure(text=original_button_text, state="normal")
+        self.browser_status_label.configure(text="Error importing session", text_color="red")
+        self.log_status(f"Error importing browser session: {error_msg}")
+        messagebox.showerror(
+            "Import Error",
+            f"Error importing browser session:\n\n{error_msg}"
+        )
+
     def start_processing(self):
         """Start the download and transcription process."""
         # Validate inputs
@@ -456,8 +610,10 @@ class InstagramTranscriberApp(ctk.CTk):
 
             # Step 2: Initialize downloader
             self.update_current_task("Initializing Instagram downloader...")
-            self.downloader = InstagramDownloader(self.download_folder)
+            selected_browser = self.browser_var.get()
+            self.downloader = InstagramDownloader(self.download_folder, selected_browser)
             self.downloader.setup_instaloader()
+            self.log_status(f"Using browser: {selected_browser}")
 
             # Login if requested
             if self.login_var.get():
