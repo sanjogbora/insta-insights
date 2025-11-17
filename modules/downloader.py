@@ -223,32 +223,45 @@ class InstagramDownloader:
             except yt_dlp.utils.DownloadError as e:
                 error_msg = str(e)
 
+                # Log full error for debugging
+                if progress_callback:
+                    progress_callback(f"DEBUG: {error_msg}")
+
                 if "403" in error_msg or "forbidden" in error_msg.lower():
                     if not cookies_loaded:
                         return False, None, "403 Forbidden - Please import your browser session first"
                     elif attempt < max_retries - 1:
                         if progress_callback:
-                            progress_callback(f"Rate limited, retrying... ({attempt + 1}/{max_retries})")
+                            progress_callback(f"Rate limited, waiting {retry_delay * 2}s... ({attempt + 2}/{max_retries})")
                         time.sleep(retry_delay * 2)
                     else:
-                        return False, None, "Instagram blocked the request. Try again later or use a different browser."
+                        return False, None, f"Instagram blocked request: {error_msg[:200]}"
                 elif "private" in error_msg.lower():
                     return False, None, "This reel is private"
+                elif "unavailable" in error_msg.lower() or "not available" in error_msg.lower():
+                    return False, None, "Video unavailable or deleted"
+                elif "login" in error_msg.lower() or "sign" in error_msg.lower():
+                    return False, None, f"Login required: {error_msg[:200]}"
                 else:
                     if attempt < max_retries - 1:
                         if progress_callback:
-                            progress_callback(f"Error, retrying... ({attempt + 1}/{max_retries})")
+                            progress_callback(f"Error: {error_msg[:100]}")
+                            progress_callback(f"Retrying in {retry_delay}s... ({attempt + 2}/{max_retries})")
                         time.sleep(retry_delay)
                     else:
-                        return False, None, f"Download failed: {error_msg[:100]}"
+                        return False, None, f"Download failed: {error_msg[:300]}"
 
             except Exception as e:
+                error_msg = str(e)
+                if progress_callback:
+                    progress_callback(f"DEBUG: Unexpected error - {error_msg}")
+
                 if attempt < max_retries - 1:
                     if progress_callback:
-                        progress_callback(f"Unexpected error, retrying... ({attempt + 1}/{max_retries})")
+                        progress_callback(f"Retrying in {retry_delay}s... ({attempt + 2}/{max_retries})")
                     time.sleep(retry_delay)
                 else:
-                    return False, None, f"Error: {str(e)[:100]}"
+                    return False, None, f"Error: {error_msg[:300]}"
 
         return False, None, "Download failed after all retries"
 
