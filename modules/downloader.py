@@ -1,18 +1,19 @@
 """
 Instagram Downloader Module
-Handles downloading Instagram reels using yt-dlp with browser cookie support.
+Handles downloading Instagram reels using Playwright browser automation with network interception.
 """
 
-import yt_dlp
 import os
 import time
 import re
+import requests
 from typing import Optional, Callable, List, Tuple
 from pathlib import Path
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 
 class InstagramDownloader:
-    """Handles downloading Instagram reels using yt-dlp with browser cookies."""
+    """Handles downloading Instagram reels using Playwright with network interception."""
 
     def __init__(self, output_folder: str = "./downloads", selected_browser: str = "auto"):
         """
@@ -20,12 +21,12 @@ class InstagramDownloader:
 
         Args:
             output_folder: Folder to save downloaded reels
-            selected_browser: Browser to use for cookies ('auto', 'chrome', 'firefox', 'edge', 'safari')
+            selected_browser: Not used (kept for compatibility)
         """
         self.output_folder = output_folder
         self.username = None  # For compatibility
         self.selected_browser = selected_browser
-        self.browser_in_use = None
+        self.browser_in_use = "playwright"
 
         # Create output folder if it doesn't exist
         os.makedirs(self.output_folder, exist_ok=True)
@@ -38,22 +39,21 @@ class InstagramDownloader:
             session_file: Ignored (kept for compatibility)
             auto_load_session: Ignored (kept for compatibility)
         """
-        print("✓ Using yt-dlp with browser session support!")
+        print("✓ Using Playwright browser automation - no authentication needed!")
 
     def set_browser(self, browser: str):
         """
-        Set which browser to use for cookie extraction.
+        Set which browser to use (not used for Playwright).
 
         Args:
-            browser: 'auto', 'chrome', 'firefox', 'edge', or 'safari'
+            browser: Ignored (kept for compatibility)
         """
-        self.selected_browser = browser
-        self.browser_in_use = None
+        pass
 
     def login(self, username: str, password: str, two_factor_callback: Optional[Callable[[], str]] = None) -> bool:
         """
         Login method for backward compatibility.
-        yt-dlp uses browser cookies, no manual login needed!
+        Playwright visits pages like a normal browser - no login needed!
 
         Args:
             username: Ignored
@@ -63,7 +63,7 @@ class InstagramDownloader:
         Returns:
             Always returns True
         """
-        print("ℹ️  Using browser session - no manual login needed")
+        print("ℹ️  Using browser automation - no login needed")
         return True
 
     def is_logged_in(self) -> bool:
@@ -71,9 +71,9 @@ class InstagramDownloader:
         Check login status.
 
         Returns:
-            True if browser cookies are being used
+            Always True (no login needed)
         """
-        return self.browser_in_use is not None
+        return True
 
     @staticmethod
     def extract_shortcode_from_url(url: str) -> Optional[str]:
@@ -107,7 +107,7 @@ class InstagramDownloader:
         retry_delay: int = 5
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
-        Download a single Instagram reel using yt-dlp with browser cookies.
+        Download a single Instagram reel using Playwright with network interception.
 
         Args:
             url: Instagram reel URL
@@ -134,97 +134,38 @@ class InstagramDownloader:
                 progress_callback(f"Already downloaded: {shortcode}")
             return True, output_path, None
 
-        # yt-dlp options
-        ydl_opts = {
-            'format': 'best[ext=mp4]/best',
-            'outtmpl': output_path,
-            'quiet': True,
-            'no_warnings': True,
-            'retries': max_retries,
-            'fragment_retries': max_retries,
-            'ignoreerrors': False,
-            'nocheckcertificate': True,
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
-            }
-        }
-
-        # Try to load cookies
-        cookies_loaded = False
-
-        # PRIORITY 1: Check for manual cookie file (bypasses Windows DPAPI encryption)
-        cookie_file_path = Path(__file__).parent.parent / 'instagram_cookies.txt'
-        if cookie_file_path.exists():
-            try:
-                ydl_opts['cookiefile'] = str(cookie_file_path)
-                cookies_loaded = True
-                self.browser_in_use = "manual_cookies"
-                if progress_callback:
-                    progress_callback("✓ Using manual cookie file (instagram_cookies.txt)")
-            except Exception as e:
-                if progress_callback:
-                    progress_callback(f"⚠️  Manual cookie file found but error: {str(e)[:100]}")
-
-        # PRIORITY 2: Try browser cookies (only if manual cookie file not found)
-        if not cookies_loaded:
-            if self.selected_browser == "auto":
-                # Try browsers in order: Firefox → Edge → Safari → Chrome
-                browsers_to_try = ['firefox', 'edge', 'safari', 'chrome']
-            else:
-                # Use user-selected browser
-                browsers_to_try = [self.selected_browser]
-
-            for browser in browsers_to_try:
-                try:
-                    # Test if cookies can be loaded
-                    test_opts = {
-                        'quiet': True,
-                        'no_warnings': True,
-                        'cookiesfrombrowser': (browser,),
-                        'extract_flat': True
-                    }
-                    with yt_dlp.YoutubeDL(test_opts) as test_ydl:
-                        pass  # Just test if it works
-
-                    # Success! Use this browser
-                    ydl_opts['cookiesfrombrowser'] = (browser,)
-                    cookies_loaded = True
-                    self.browser_in_use = browser
-                    if progress_callback:
-                        progress_callback(f"✓ Using {browser.title()} session")
-                    break
-
-                except Exception as e:
-                    error_str = str(e)
-                    if 'could not copy' in error_str.lower() and browser == 'chrome':
-                        if progress_callback and self.selected_browser == browser:
-                            progress_callback(f"⚠️  {browser.title()} is running - close it or select another browser")
-                    continue
-
-        if not cookies_loaded:
-            if progress_callback:
-                if self.selected_browser != "auto":
-                    progress_callback(f"⚠️  Could not load {self.selected_browser.title()} session")
-                    progress_callback(f"ℹ️  Make sure you're logged into Instagram in {self.selected_browser.title()}")
-                    progress_callback("💡 OR: Export cookies manually (see export_cookies_instructions.md)")
-                else:
-                    progress_callback("⚠️  No browser sessions found")
-                    progress_callback("💡 Solution: Export cookies manually (see export_cookies_instructions.md)")
-                    progress_callback("ℹ️  Save as 'instagram_cookies.txt' in project folder")
-
-        # Retry logic
+        # Try to download with retries
         for attempt in range(max_retries):
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
+                if progress_callback:
+                    progress_callback(f"Launching browser... (attempt {attempt + 1}/{max_retries})")
 
-                # Check if file was downloaded
+                # Use Playwright to capture video URL from network traffic
+                video_url = self._capture_video_url_from_network(url, progress_callback)
+
+                if not video_url:
+                    if attempt < max_retries - 1:
+                        if progress_callback:
+                            progress_callback(f"Could not find video URL, retrying in {retry_delay}s...")
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        return False, None, "Could not find video URL - reel might be private or deleted"
+
+                # Download the video from CDN
+                if progress_callback:
+                    progress_callback(f"Downloading from CDN...")
+
+                response = requests.get(video_url, stream=True, timeout=30)
+                response.raise_for_status()
+
+                # Save video
+                with open(output_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+
+                # Verify download
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
                     if progress_callback:
                         progress_callback(f"✓ Successfully downloaded: {shortcode}")
@@ -232,55 +173,111 @@ class InstagramDownloader:
                 else:
                     if attempt < max_retries - 1:
                         if progress_callback:
-                            progress_callback(f"Retry {attempt + 1}/{max_retries}...")
+                            progress_callback(f"Download incomplete, retrying...")
                         time.sleep(retry_delay)
                     else:
-                        return False, None, f"Video file not found after download"
+                        return False, None, "Downloaded file is too small or corrupt"
 
-            except yt_dlp.utils.DownloadError as e:
+            except requests.RequestException as e:
                 error_msg = str(e)
-
-                # Log full error for debugging
-                if progress_callback:
-                    progress_callback(f"DEBUG: {error_msg}")
-
-                if "403" in error_msg or "forbidden" in error_msg.lower():
-                    if not cookies_loaded:
-                        return False, None, "403 Forbidden - Please import your browser session first"
-                    elif attempt < max_retries - 1:
-                        if progress_callback:
-                            progress_callback(f"Rate limited, waiting {retry_delay * 2}s... ({attempt + 2}/{max_retries})")
-                        time.sleep(retry_delay * 2)
-                    else:
-                        return False, None, f"Instagram blocked request: {error_msg[:200]}"
-                elif "private" in error_msg.lower():
-                    return False, None, "This reel is private"
-                elif "unavailable" in error_msg.lower() or "not available" in error_msg.lower():
-                    return False, None, "Video unavailable or deleted"
-                elif "login" in error_msg.lower() or "sign" in error_msg.lower():
-                    return False, None, f"Login required: {error_msg[:200]}"
+                if attempt < max_retries - 1:
+                    if progress_callback:
+                        progress_callback(f"Network error, retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
                 else:
-                    if attempt < max_retries - 1:
-                        if progress_callback:
-                            progress_callback(f"Error: {error_msg[:100]}")
-                            progress_callback(f"Retrying in {retry_delay}s... ({attempt + 2}/{max_retries})")
-                        time.sleep(retry_delay)
-                    else:
-                        return False, None, f"Download failed: {error_msg[:300]}"
+                    return False, None, f"Download failed: {error_msg[:200]}"
+
+            except PlaywrightTimeout as e:
+                if attempt < max_retries - 1:
+                    if progress_callback:
+                        progress_callback(f"Timeout, retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                else:
+                    return False, None, "Timeout while loading Instagram page"
 
             except Exception as e:
                 error_msg = str(e)
-                if progress_callback:
-                    progress_callback(f"DEBUG: Unexpected error - {error_msg}")
-
                 if attempt < max_retries - 1:
                     if progress_callback:
-                        progress_callback(f"Retrying in {retry_delay}s... ({attempt + 2}/{max_retries})")
+                        progress_callback(f"Error: {error_msg[:100]}, retrying...")
                     time.sleep(retry_delay)
                 else:
                     return False, None, f"Error: {error_msg[:300]}"
 
         return False, None, "Download failed after all retries"
+
+    def _capture_video_url_from_network(
+        self,
+        url: str,
+        progress_callback: Optional[Callable[[str], None]] = None
+    ) -> Optional[str]:
+        """
+        Use Playwright to visit Instagram page and capture video URL from network traffic.
+
+        Args:
+            url: Instagram reel URL
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            Video CDN URL if found, None otherwise
+        """
+        video_url = None
+
+        def handle_response(response):
+            """Capture video URLs from network responses."""
+            nonlocal video_url
+            try:
+                # Look for .mp4 video files in network traffic
+                response_url = response.url
+                if '.mp4' in response_url and response.status == 200:
+                    # Instagram video CDN URLs contain .mp4
+                    if any(domain in response_url for domain in ['cdninstagram', 'fbcdn', 'instagram']):
+                        video_url = response_url
+                        if progress_callback:
+                            progress_callback(f"✓ Captured video URL from network")
+            except:
+                pass
+
+        try:
+            with sync_playwright() as p:
+                # Launch browser in headless mode
+                browser = p.chromium.launch(headless=True)
+                context = browser.new_context(
+                    viewport={'width': 1920, 'height': 1080},
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                )
+
+                page = context.new_page()
+
+                # Set up response listener to capture video URLs
+                page.on('response', handle_response)
+
+                if progress_callback:
+                    progress_callback("Loading Instagram page...")
+
+                # Visit the page
+                page.goto(url, wait_until='networkidle', timeout=30000)
+
+                # Wait a bit for video to load
+                time.sleep(3)
+
+                # Try to click play button if it exists (sometimes needed to trigger video load)
+                try:
+                    play_button = page.locator('button[aria-label*="Play"], button[aria-label*="play"]').first
+                    if play_button.is_visible(timeout=2000):
+                        play_button.click()
+                        time.sleep(2)
+                except:
+                    pass
+
+                browser.close()
+
+                return video_url
+
+        except Exception as e:
+            if progress_callback:
+                progress_callback(f"Browser error: {str(e)[:100]}")
+            return None
 
     def batch_download(
         self,
@@ -356,7 +353,7 @@ def download_instagram_reel(url: str, output_folder: str = "./downloads", browse
     Args:
         url: Instagram URL
         output_folder: Where to save the video
-        browser: Which browser to use for cookies
+        browser: Not used (kept for compatibility)
 
     Returns:
         Tuple of (success, video_path, error_message)
