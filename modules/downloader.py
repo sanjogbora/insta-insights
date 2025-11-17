@@ -221,20 +221,18 @@ class InstagramDownloader:
         Returns:
             Video CDN URL if found, None otherwise
         """
-        video_url = None
+        video_urls = []  # Collect all potential video URLs
 
         def handle_response(response):
             """Capture video URLs from network responses."""
-            nonlocal video_url
             try:
-                # Look for .mp4 video files in network traffic
                 response_url = response.url
-                if '.mp4' in response_url and response.status == 200:
-                    # Instagram video CDN URLs contain .mp4
-                    if any(domain in response_url for domain in ['cdninstagram', 'fbcdn', 'instagram']):
-                        video_url = response_url
-                        if progress_callback:
-                            progress_callback(f"✓ Captured video URL from network")
+                # Look for video files in network traffic
+                if response.status == 200:
+                    # Instagram videos can be .mp4 or streaming formats
+                    if any(ext in response_url.lower() for ext in ['.mp4', '.m4v']):
+                        if any(domain in response_url for domain in ['cdninstagram', 'fbcdn', 'instagram']):
+                            video_urls.append(response_url)
             except:
                 pass
 
@@ -249,30 +247,102 @@ class InstagramDownloader:
 
                 page = context.new_page()
 
-                # Set up response listener to capture video URLs
+                # Set up response listener BEFORE navigating
                 page.on('response', handle_response)
 
                 if progress_callback:
                     progress_callback("Loading Instagram page...")
 
-                # Visit the page
-                page.goto(url, wait_until='networkidle', timeout=30000)
+                # Visit the page with longer timeout
+                page.goto(url, wait_until='domcontentloaded', timeout=30000)
 
-                # Wait a bit for video to load
-                time.sleep(3)
+                # Wait for network to settle
+                time.sleep(2)
 
-                # Try to click play button if it exists (sometimes needed to trigger video load)
+                # Scroll down a bit to trigger lazy loading
                 try:
-                    play_button = page.locator('button[aria-label*="Play"], button[aria-label*="play"]').first
-                    if play_button.is_visible(timeout=2000):
-                        play_button.click()
+                    page.evaluate("window.scrollBy(0, 300)")
+                    time.sleep(1)
+                except:
+                    pass
+
+                # Try to find and click video element to trigger loading
+                try:
+                    # Look for video element
+                    video = page.locator('video').first
+                    if video.is_visible(timeout=3000):
+                        # Try to play it
+                        page.evaluate("""
+                            const video = document.querySelector('video');
+                            if (video) {
+                                video.play();
+                            }
+                        """)
                         time.sleep(2)
                 except:
                     pass
 
+                # FALLBACK 1: Try to extract video URL from video element src
+                if not video_urls:
+                    if progress_callback:
+                        progress_callback("Trying to extract from DOM...")
+                    try:
+                        video_src = page.evaluate("""
+                            () => {
+                                const video = document.querySelector('video');
+                                if (video && video.src) {
+                                    return video.src;
+                                }
+                                // Try source element
+                                const source = document.querySelector('video source');
+                                if (source && source.src) {
+                                    return source.src;
+                                }
+                                return null;
+                            }
+                        """)
+                        if video_src and '.mp4' in video_src:
+                            video_urls.append(video_src)
+                    except:
+                        pass
+
+                # FALLBACK 2: Look in page source for video URLs
+                if not video_urls:
+                    if progress_callback:
+                        progress_callback("Searching page content...")
+                    try:
+                        content = page.content()
+                        # Find video URLs in the HTML
+                        import re
+                        patterns = [
+                            r'(https://[^"\']+\.mp4[^"\']*)',
+                            r'(https://[^"\']+cdninstagram[^"\']+\.mp4[^"\']*)',
+                            r'"video_url":"([^"]+)"',
+                            r'"playback_url":"([^"]+)"',
+                        ]
+                        for pattern in patterns:
+                            matches = re.findall(pattern, content)
+                            for match in matches:
+                                # Unescape if needed
+                                video_url = match.replace('\\/', '/').replace('&amp;', '&')
+                                if 'cdninstagram' in video_url or 'fbcdn' in video_url:
+                                    video_urls.append(video_url)
+                    except:
+                        pass
+
                 browser.close()
 
-                return video_url
+                # Return the first valid video URL found
+                if video_urls:
+                    if progress_callback:
+                        progress_callback(f"✓ Found video URL")
+                    # Prefer URLs with higher quality indicators
+                    for url in video_urls:
+                        if 'hd' in url.lower() or 'high' in url.lower():
+                            return url
+                    return video_urls[0]
+
+                return None
 
         except Exception as e:
             if progress_callback:
