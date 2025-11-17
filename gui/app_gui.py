@@ -203,6 +203,37 @@ class InstagramTranscriberApp(ctk.CTk):
         self.password_entry = ctk.CTkEntry(self.credentials_frame, width=200, show="*")
         self.password_entry.grid(row=1, column=1, padx=10, pady=5)
 
+        # Browser session import option
+        browser_frame = ctk.CTkFrame(settings_frame)
+        browser_frame.pack(fill="x", padx=10, pady=5)
+
+        browser_label = ctk.CTkLabel(browser_frame, text="Or import session from browser:", font=ctk.CTkFont(weight="bold"))
+        browser_label.pack(side="left", padx=10)
+
+        self.browser_var = ctk.StringVar(value="Auto-detect")
+        self.browser_dropdown = ctk.CTkOptionMenu(
+            browser_frame,
+            values=["Auto-detect", "Chrome", "Firefox", "Edge", "Safari", "Brave", "Opera"],
+            variable=self.browser_var,
+            width=130
+        )
+        self.browser_dropdown.pack(side="left", padx=5)
+
+        self.import_browser_button = ctk.CTkButton(
+            browser_frame,
+            text="Import Browser Session",
+            command=self.import_browser_session,
+            width=180
+        )
+        self.import_browser_button.pack(side="left", padx=5)
+
+        self.browser_status_label = ctk.CTkLabel(
+            browser_frame,
+            text="",
+            text_color="gray"
+        )
+        self.browser_status_label.pack(side="left", padx=10)
+
     def create_progress_section(self, parent):
         """Create progress tracking widgets."""
         progress_frame = ctk.CTkFrame(parent)
@@ -356,6 +387,73 @@ class InstagramTranscriberApp(ctk.CTk):
         else:
             self.credentials_frame.pack_forget()
 
+    def import_browser_session(self):
+        """Import Instagram session from browser cookies."""
+        if self.is_processing:
+            messagebox.showwarning("Warning", "Cannot import session while processing")
+            return
+
+        # Get selected browser
+        browser_choice = self.browser_var.get()
+        if browser_choice == "Auto-detect":
+            browser = "auto"
+        else:
+            browser = browser_choice.lower()
+
+        # Update status
+        self.browser_status_label.configure(text="Importing...", text_color="orange")
+        self.import_browser_button.configure(state="disabled")
+
+        # Run import in separate thread to avoid freezing UI
+        def import_session_thread():
+            try:
+                # Initialize downloader if not already done
+                if self.downloader is None:
+                    self.downloader = InstagramDownloader(self.download_folder)
+                    self.downloader.setup_instaloader()
+
+                # Import browser session
+                success, error = self.downloader.load_session_from_browser(browser)
+
+                # Update UI on main thread
+                def update_ui():
+                    self.import_browser_button.configure(state="normal")
+                    if success:
+                        self.browser_status_label.configure(text="✓ Session imported", text_color="green")
+                        self.log_status(f"Successfully imported Instagram session from {browser_choice}")
+                        messagebox.showinfo(
+                            "Success",
+                            f"Successfully imported Instagram session from {browser_choice}!\n\n"
+                            "You can now download reels without entering credentials."
+                        )
+                        # Disable login checkbox since we're using browser session
+                        self.login_var.set(False)
+                        self.toggle_login_fields()
+                    else:
+                        self.browser_status_label.configure(text="✗ Import failed", text_color="red")
+                        self.log_status(f"Failed to import session: {error}")
+                        messagebox.showerror(
+                            "Import Failed",
+                            f"Failed to import browser session:\n\n{error}\n\n"
+                            "Make sure:\n"
+                            "1. You're logged into Instagram in your browser\n"
+                            "2. browser_cookie3 is installed: pip install browser_cookie3\n"
+                            "3. Your browser is closed (some browsers lock cookies while running)"
+                        )
+
+                self.after(0, update_ui)
+
+            except Exception as e:
+                def show_error():
+                    self.import_browser_button.configure(state="normal")
+                    self.browser_status_label.configure(text="✗ Error", text_color="red")
+                    messagebox.showerror("Error", f"An error occurred:\n{str(e)}")
+
+                self.after(0, show_error)
+
+        thread = threading.Thread(target=import_session_thread, daemon=True)
+        thread.start()
+
     def start_processing(self):
         """Start the download and transcription process."""
         # Validate inputs
@@ -412,13 +510,19 @@ class InstagramTranscriberApp(ctk.CTk):
 
             self.update_overall_progress(0, self.total_items)
 
-            # Step 2: Initialize downloader
+            # Step 2: Initialize downloader (if not already initialized by browser import)
             self.update_current_task("Initializing Instagram downloader...")
-            self.downloader = InstagramDownloader(self.download_folder)
-            self.downloader.setup_instaloader()
+            if self.downloader is None:
+                self.downloader = InstagramDownloader(self.download_folder)
+                self.downloader.setup_instaloader()
+            elif not self.downloader.loader:
+                self.downloader.setup_instaloader()
 
-            # Login if requested
-            if self.login_var.get():
+            # Check if already logged in via browser session
+            if self.downloader.is_logged_in:
+                self.log_status("Using imported browser session for authentication")
+            # Otherwise, login if requested
+            elif self.login_var.get():
                 username = self.username_entry.get()
                 password = self.password_entry.get()
 
@@ -430,6 +534,9 @@ class InstagramTranscriberApp(ctk.CTk):
                         self.log_status("Login failed - continuing without authentication")
                 else:
                     self.log_status("Username/password not provided - continuing without authentication")
+            else:
+                self.log_status("WARNING: No authentication provided. Downloads may fail with 403 errors.")
+                self.log_status("Please use 'Import Browser Session' or enable 'Login to Instagram'")
 
             # Step 3: Initialize transcriber
             self.update_current_task("Loading Whisper model...")

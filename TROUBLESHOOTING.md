@@ -29,36 +29,50 @@ The easiest and most reliable solution is to login with your Instagram credentia
 
 **Note:** Your credentials are sent directly to Instagram and are not stored or logged by this application.
 
-### Solution 2: Import Browser Session Cookies
+### Solution 2: Import Browser Session Cookies (NEW - Easy!)
 
-If you're already logged into Instagram in your browser, you can import those cookies:
+If you're already logged into Instagram in your browser, you can import those cookies using the new GUI feature:
 
-#### Step 1: Install browser_cookie3
+#### Using the GUI (Recommended)
 
-```bash
-pip install browser_cookie3
-```
+1. Make sure you're logged into Instagram in your browser
+2. In the application, look for the "Or import session from browser:" section
+3. Select your browser from the dropdown:
+   - **Auto-detect** (tries all browsers automatically)
+   - Chrome
+   - Firefox
+   - Edge
+   - Safari
+   - Brave
+   - Opera
+4. Click **"Import Browser Session"**
+5. Wait for confirmation message
+6. Start downloading!
 
-#### Step 2: Use the browser session import
+**Tips:**
+- Use "Auto-detect" if you're not sure which browser has your Instagram session
+- Some browsers require being closed for the import to work
+- You only need to import once per session
 
-You have two options:
+#### Using Python Code
 
-**Option A: Through the GUI (if implemented)**
-- Check "Import session from browser"
-- Application will automatically use your browser cookies
-
-**Option B: Through Python code**
 ```python
 from modules import InstagramDownloader
 
 downloader = InstagramDownloader()
 downloader.setup_instaloader()
 
-# Import session from Chrome (replace with your Instagram username)
-downloader.load_session_from_browser('your_instagram_username')
+# Auto-detect browser with Instagram session
+success, error = downloader.load_session_from_browser('auto')
 
-# Now download reels
-success, video_path, error = downloader.download_reel('https://www.instagram.com/reel/ABC123/')
+# Or specify a browser
+success, error = downloader.load_session_from_browser('chrome')
+
+if success:
+    # Now download reels
+    success, video_path, error = downloader.download_reel('https://www.instagram.com/reel/ABC123/')
+else:
+    print(f"Import failed: {error}")
 ```
 
 **Supported browsers:**
@@ -66,6 +80,9 @@ success, video_path, error = downloader.download_reel('https://www.instagram.com
 - Firefox
 - Edge
 - Safari (macOS only)
+- Brave
+- Opera
+- Chromium
 
 ### Solution 3: Wait and Retry
 

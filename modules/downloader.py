@@ -105,18 +105,17 @@ class InstagramDownloader:
             except Exception as e:
                 print(f"Failed to save session: {e}")
 
-    def load_session_from_browser(self, username: str, sessionfile: Optional[str] = None):
+    def load_session_from_browser(self, browser: str = "chrome") -> Tuple[bool, Optional[str]]:
         """
         Load session from browser cookies using instaloader's import functionality.
 
         This method attempts to import cookies from your browser to avoid 403 errors.
 
         Args:
-            username: Instagram username to load session for
-            sessionfile: Optional path to load session from
+            browser: Browser to import from ('chrome', 'firefox', 'edge', 'safari', 'auto')
 
         Returns:
-            True if successful, False otherwise
+            Tuple of (success: bool, error_message: str or None)
         """
         if self.loader is None:
             self.setup_instaloader()
@@ -125,24 +124,72 @@ class InstagramDownloader:
             # Try to import session from browser
             import browser_cookie3
 
-            # Get Instagram cookies from browser
-            cookies = browser_cookie3.chrome(domain_name='instagram.com')
+            browser_lower = browser.lower()
+
+            # Map of browser names to browser_cookie3 functions
+            browser_functions = {
+                'chrome': browser_cookie3.chrome,
+                'firefox': browser_cookie3.firefox,
+                'edge': browser_cookie3.edge,
+                'safari': browser_cookie3.safari,
+                'chromium': browser_cookie3.chromium,
+                'brave': browser_cookie3.brave,
+                'opera': browser_cookie3.opera,
+            }
+
+            cookies = None
+
+            if browser_lower == 'auto':
+                # Try browsers in order of popularity
+                browsers_to_try = ['chrome', 'edge', 'firefox', 'brave', 'safari', 'opera']
+
+                for browser_name in browsers_to_try:
+                    try:
+                        browser_func = browser_functions.get(browser_name)
+                        if browser_func:
+                            cookies = browser_func(domain_name='instagram.com')
+                            # Check if we got any cookies
+                            cookie_list = list(cookies)
+                            if cookie_list:
+                                cookies = cookie_list
+                                print(f"Successfully found Instagram session in {browser_name.title()}")
+                                break
+                    except Exception:
+                        continue
+
+                if not cookies:
+                    return False, "Could not find Instagram session in any browser. Please login to Instagram in your browser first."
+            else:
+                # Use specific browser
+                browser_func = browser_functions.get(browser_lower)
+                if not browser_func:
+                    return False, f"Unsupported browser: {browser}. Supported browsers: Chrome, Firefox, Edge, Safari, Brave, Opera"
+
+                try:
+                    cookies = browser_func(domain_name='instagram.com')
+                    cookies = list(cookies)  # Convert to list to check if empty
+
+                    if not cookies:
+                        return False, f"No Instagram cookies found in {browser.title()}. Please login to Instagram in your browser first."
+
+                except Exception as e:
+                    return False, f"Failed to read cookies from {browser.title()}: {str(e)}"
 
             # Load the cookies into instaloader's session
-            for cookie in cookies:
-                self.loader.context._session.cookies.set_cookie(cookie)
+            if cookies:
+                for cookie in cookies:
+                    self.loader.context._session.cookies.set_cookie(cookie)
 
-            self.is_logged_in = True
-            self.loader.context.is_logged_in = True
-            print("Successfully imported session from browser")
-            return True
+                self.is_logged_in = True
+                self.loader.context.is_logged_in = True
+                return True, None
+            else:
+                return False, "No Instagram cookies found. Please login to Instagram in your browser first."
 
         except ImportError:
-            print("browser_cookie3 not installed. Install it with: pip install browser_cookie3")
-            return False
+            return False, "browser_cookie3 not installed. Install it with: pip install browser_cookie3"
         except Exception as e:
-            print(f"Failed to import browser session: {e}")
-            return False
+            return False, f"Failed to import browser session: {str(e)}"
 
     @staticmethod
     def extract_shortcode_from_url(url: str) -> Optional[str]:

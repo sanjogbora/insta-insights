@@ -147,9 +147,22 @@ Choose based on your needs:
 | **medium** | Slow | High | ~5 GB | Professional work |
 | **large** | Very Slow | Best | ~10 GB | Maximum accuracy (GPU recommended) |
 
-### Instagram Login (Optional)
+### Instagram Authentication (Required to Avoid 403 Errors)
 
-For downloading private content or avoiding rate limits:
+To avoid 403 Forbidden errors, you must authenticate with Instagram. Choose one of these methods:
+
+#### Option 1: Import Browser Session (Easiest - Recommended)
+
+1. Make sure you're logged into Instagram in your browser
+2. In the app, select your browser from the dropdown (or use "Auto-detect")
+3. Click **"Import Browser Session"**
+4. Done! The app will use your existing browser session
+
+**Supported browsers**: Chrome, Firefox, Edge, Safari, Brave, Opera
+
+**Note**: Some browsers may need to be closed for the import to work.
+
+#### Option 2: Login with Credentials
 
 1. Check "Login to Instagram"
 2. Enter your Instagram username and password
